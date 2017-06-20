@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head><title>Edit</title></head>
+  <body>
+    <a href="/app?action=list-all">List all</a>
+    <br>
+    <a href="/app?action=show&id=1">Record 1</a>
+    <br>
+    Message: {{:_msg}}
+    <form action="" method="GET">
+      <input type="hidden" name="action" value="update-db">
+      <input type="hidden" name="id" value="{{:id}}">
+      <table>
+        <tr>
+          <td>date</td><td>category</td><td>amount</td><td>mileage</td><td>notes</td>
+        </tr>
+        <tr>
+          <td><input type="text" name="date" value="{{:date}}" size="60"></td>
+          <td>
+            <select>
+              <option value="{{:cid}} {{:selected}}">{{:description}}</option>
+            </select>
+          </td>
+          <td><input type="text" name="amount" value="{{:amount}}" size="60"></td>
+          <td><input type="text" name="mileage" value="{{:mileage}}" size="60"></td>
+          <td><input type="text" name="notes" value="{{:notes}}" size="60"></td>
+        </tr>
+      </table>
+      <input type="submit" name="submit" value="Go">
+    </form>
+  </body>
+</html>

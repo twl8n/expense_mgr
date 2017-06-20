@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head><title>List all</title></head>
+  <body>
+    <a href="/app?action=show&id=1">Record 1</a>
+    <br>
+    Message: {{:_msg}}
+    <p>
+    {{for}}
+      <a href="/app?action=show&id={{:id}}">Edit id {{:id}}</a>
+      <br/>
+      Title: {{:title}}
+      <br/>
+      Desc: {{:desc}}
+      <br/>
+      Stars: {{:stars}}
+      <br/>
+    {{end}}
+  </body>
+</html>
