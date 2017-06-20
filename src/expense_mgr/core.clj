@@ -3,11 +3,13 @@
             [clojure.tools.namespace.repl :as tns]
             [clojure.string :as str]
             [clojure.pprint :refer :all]
+            [clostache.parser :refer [render]]
             [ring.adapter.jetty :as ringa]
             [ring.util.response :as ringu]
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.multipart-params :refer [wrap-multipart-params]])
   (:gen-class))
+
 
 ;; use destructuring to allow a 2 arg function to work in comp
 ;; Not a great example since 2 arg fun really is 1 arg with destructuring
@@ -84,7 +86,7 @@
 (def db
   {:classname   "org.sqlite.JDBC"
    :subprotocol "sqlite"
-   :subname     "affmgr.db"
+   :subname     "expmgr.db"
    })
 
 (defn create-db []
@@ -96,11 +98,14 @@
                                          [:body :text]))
        (catch Exception e (println e))))
 
+;; Can use SQL to set col "selected" as true when entry.category = category.id
+;; Or can use clojure.
 (defn show [params]
   (let [id (get params "id")
-        output (jdbc/query db ["select * from entry where id=?" id])]
+        output (jdbc/query db ["select * from entry where id=?" id])
+        cats (jdbc/query db ["select * from category order by name"])]
     ;; (spit "show_debug.txt" (with-out-str (prn "id: " id " out: " output)))
-    output))
+    (map #(assoc % :all-category cats) output)))
 
 (defn choose [params]
   (let [title (params "title")]
@@ -143,7 +148,7 @@ equivalent of using regexes to change a string in place."
 ;; (let [[_ pre body post] (re-matches #"(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$" "pre{{for}}middle{{end}}post")] {:pre pre :body body :post post})
 ;; {:pre "pre", :body "middle", :post "post"}
 
-(defn fill-list-all
+(defn map-re-fill-list-all
   "Fill in a list of all records. The regex must use (?s) so that newline matches .
 Initialize with empty string, map-re on the body, and accumulate all the body strings."
   [rseq]
@@ -158,11 +163,18 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
              (recur (str full (map-re body (first remap))) (rest remap))))
          post)))
 
+(defn fill-list-all
+  "Fill in a list of all records. The regex must use (?s) so that newline matches .
+Initialize with empty string, map-re on the body, and accumulate all the body strings."
+  [rseq]
+  (let [template (slurp "list-all.html")]
+    (render template rseq)))
+
 (defn edit
   "Map each key value in the record against placeholders in the template to create a web page."
   [record]
   (let [template (slurp "edit.html")
-        body (map-re template record)]
+        body (render template record)]
     body))
 
 (defn handler 
@@ -181,6 +193,7 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                      (map #(assoc % :_msg "updated") (show params)))
                    (= "list-all" action)
                    (list-all params))]
+    (prn "rmap: " rmap)
     #_(spit "rmap_debug.txt" (with-out-str (prn "rmap: " rmap)))
     (cond (some? rmap)
           (cond (or (= "show" action)
@@ -191,7 +204,7 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                     (= "list-all" action)
                     {:status 200
                      :headers {"Content-Type" "text/html"}
-                     :body (fill-list-all rmap)})
+                     :body (fill-list-all {:all-recs rmap :sys-msg "list all"})})
           :else
           (ringu/content-type 
            (ringu/response 
@@ -208,8 +221,8 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
 (defonce server (ringa/run-jetty app {:port 8080 :join? false}))
 
 ;; Need -main for 'lien run', but it is ignored by 'lein ring'.
-(defn -main []
-  (ringa/run-jetty app {:port 8080}))
+;; (defn -main []
+;;   (ringa/run-jetty app {:port 8080}))
 
 ;; https://stackoverflow.com/questions/39765943/clojure-java-jdbc-lazy-query
 ;; https://jdbc.postgresql.org/documentation/83/query.html#query-with-cursor
@@ -256,3 +269,10 @@ http://pesterhazy.karmafish.net/presumably/2015-05-25-getting-started-with-cloju
           (do
             (jdbc/execute! dbh ["insert into entry (title,stars) values (?,?)" (str "demo transaction" num) num])
           (recur remainder)))))))
+
+
+(defn refresh []
+  (.stop server)
+  (tns/refresh)
+  (.start server))
+

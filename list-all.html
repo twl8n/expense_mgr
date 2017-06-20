@@ -4,17 +4,28 @@
   <body>
     <a href="/app?action=show&id=1">Record 1</a>
     <br>
-    Message: {{:_msg}}
+    Message: {{sys-msg}}
     <p>
-    {{for}}
-      <a href="/app?action=show&id={{:id}}">Edit id {{:id}}</a>
-      <br/>
-      Title: {{:title}}
-      <br/>
-      Desc: {{:desc}}
-      <br/>
-      Stars: {{:stars}}
-      <br/>
-    {{end}}
+      <table>
+        <tr>
+          <td>date</td><td>category</td><td>amount</td><td>mileage</td><td>notes</td><td></td>
+        </tr>
+        {{#all-recs}}
+        <tr>
+          <td><input type="text" name="date" value="{{date}}"></td>
+          <td>
+            <select>
+              <option value="{{cid}} {{selected}}">{{description}}</option>
+            </select>
+          </td>
+          <td><input type="text" name="amount" value="{{amount}}"></td>
+          <td><input type="text" name="mileage" value="{{mileage}}" ></td>
+          <td><input type="text" name="notes" value="{{notes}}" ></td>
+          <td>
+            <a href="/app?action=show&id={{id}}">Edit id {{id}}</a>
+          </td>
+        </tr>
+        {{/all-recs}}
+      </table>
   </body>
 </html>

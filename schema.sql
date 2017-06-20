@@ -16,10 +16,11 @@ create table category (
         desc text
 );
 
--- many to many between entry and tag. Each entry can have multiple tags. Each tag may be used on multiple entries.
+-- many to many between entry and category. Each entry can have multiple categorys. Each category may be used
+-- on multiple entries.
 create table etocat (
         eid integer, -- fk to entry.id
-        cid integer  -- fk to tag.id
+        cid integer  -- fk to category.id
 );
 
 
