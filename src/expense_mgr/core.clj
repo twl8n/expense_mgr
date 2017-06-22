@@ -142,10 +142,27 @@ equivalent of using regexes to change a string in place."
       ostr
       (recur (str/replace ostr (re-pattern (pq (str "{{" label "}}"))) (str value)) remainder))))
 
-(defn list-all [params]
-  (jdbc/query db ["select * from entry order by id"]))
+(defn map-selected [outer inner]
+  "map inner and conditionally create :selected key, mapping the result into outer as :all-category."
+  (map (fn [omap]
+         (assoc omap :all-category
+                (map (fn [imap] 
+                       (if 
+                           (= (:category omap) (:id imap)) 
+                         (assoc imap :selected "selected")
+                         imap)) inner))) outer))
 
-;; (let [[_ pre body post] (re-matches #"(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$" "pre{{for}}middle{{end}}post")] {:pre pre :body body :post post})
+(defn list-all [params]
+  (let [recs (jdbc/query db ["select * from entry order by id"])
+        cats (jdbc/query db ["select * from category order by name"])]
+    ;; (map #(assoc % :all-category cats) recs)
+    ;;(map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
+    (assoc {:all-recs (map-selected recs cats)} :all-category cats)
+    ))
+
+;; (let [[_ pre body post] (re-matches #"(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$"
+;; "pre{{for}}middle{{end}}post")]
+;; {:pre pre :body body :post post})
 ;; {:pre "pre", :body "middle", :post "post"}
 
 (defn map-re-fill-list-all
@@ -204,7 +221,7 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                     (= "list-all" action)
                     {:status 200
                      :headers {"Content-Type" "text/html"}
-                     :body (fill-list-all {:all-recs rmap :sys-msg "list all"})})
+                     :body (fill-list-all (assoc rmap :sys-msg "list all"))})
           :else
           (ringu/content-type 
            (ringu/response 
@@ -218,7 +235,8 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
 ;; (defonce server (run-jetty #'my-app {:port 8080 :join? false}))
 
 ;; Unclear how defonce and lein ring server headless will play together.
-(defonce server (ringa/run-jetty app {:port 8080 :join? false}))
+(defn ds []
+  (defonce server (ringa/run-jetty app {:port 8080 :join? false})))
 
 ;; Need -main for 'lien run', but it is ignored by 'lein ring'.
 ;; (defn -main []
@@ -271,8 +289,9 @@ http://pesterhazy.karmafish.net/presumably/2015-05-25-getting-started-with-cloju
           (recur remainder)))))))
 
 
-(defn refresh []
+(defn makefresh []
   (.stop server)
   (tns/refresh)
+  (ds)
   (.start server))
 

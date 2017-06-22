@@ -6,26 +6,51 @@
     <br>
     Message: {{sys-msg}}
     <p>
-      <table>
-        <tr>
-          <td>date</td><td>category</td><td>amount</td><td>mileage</td><td>notes</td><td></td>
-        </tr>
-        {{#all-recs}}
-        <tr>
-          <td><input type="text" name="date" value="{{date}}"></td>
-          <td>
-            <select>
-              <option value="{{cid}} {{selected}}">{{description}}</option>
-            </select>
-          </td>
-          <td><input type="text" name="amount" value="{{amount}}"></td>
-          <td><input type="text" name="mileage" value="{{mileage}}" ></td>
-          <td><input type="text" name="notes" value="{{notes}}" ></td>
-          <td>
-            <a href="/app?action=show&id={{id}}">Edit id {{id}}</a>
-          </td>
-        </tr>
-        {{/all-recs}}
-      </table>
+      <form action="" method="GET">
+        <table>
+          <tr>
+            <td>date</td><td>category</td><td>amount</td><td>mileage</td><td>notes</td><td></td>
+          </tr>
+          {{#all-recs}}
+          <tr>
+            <td>
+              <input type="hidden" name="id" value="{{id}}">
+              <input type="text" name="date" value="{{date}}"></td>
+            <td>
+              <select name="category">
+                {{#all-category}}
+                <option value="{{id}}" {{selected}}>{{name}}</option>
+                {{/all-category}}
+              </select>
+            </td>
+            <td><input type="text" name="amount" value="{{amount}}"></td>
+            <td><input type="text" name="mileage" value="{{mileage}}" ></td>
+            <td><input type="text" name="notes" value="{{notes}}" ></td>
+            <td>
+              <a href="/app?action=show&id={{id}}">Edit id {{id}}</a>
+              <input type="submit" name="submit">
+            </td>
+          </tr>
+          {{/all-recs}}
+          <tr>
+            <td>
+              <input type="hidden" name="id" value="">
+              <input type="text" name="date" value=""></td>
+            <td>
+              <select name="category">
+                {{#all-category}}
+                <option value="{{id}}">{{name}}</option>
+                {{/all-category}}
+              </select>
+            </td>
+            <td><input type="text" name="amount" value=""></td>
+            <td><input type="text" name="mileage" value="" ></td>
+            <td><input type="text" name="notes" value="" ></td>
+            <td>
+              <input type="submit" name="insert" value="insert">
+            </td>
+          </tr>
+        </table>
+      </form>
   </body>
 </html>
