@@ -160,6 +160,22 @@ equivalent of using regexes to change a string in place."
     (assoc {:all-recs (map-selected recs cats)} :all-category cats)
     ))
 
+(defn insert [params]
+  (let [sth (jdbc/prepare-statement
+             (jdbc/get-connection db)
+             ["insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"]
+             :return-keys true)
+        
+        recs (jdbc/db-do-prepared-return-keys
+              sth
+              [(params "date")
+               (params "category")
+               (params "amount")
+               (params "mileage")
+               (params "notes")])]
+    (prn "insert recs: " recs)
+    recs))
+
 ;; (let [[_ pre body post] (re-matches #"(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$"
 ;; "pre{{for}}middle{{end}}post")]
 ;; {:pre pre :body body :post post})
@@ -209,7 +225,9 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                      (update-db params)
                      (map #(assoc % :_msg "updated") (show params)))
                    (= "list-all" action)
-                   (list-all params))]
+                   (list-all params)
+                   (= "insert" action)
+                   (insert params))]
     (prn "rmap: " rmap)
     #_(spit "rmap_debug.txt" (with-out-str (prn "rmap: " rmap)))
     (cond (some? rmap)
