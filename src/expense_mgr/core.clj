@@ -160,10 +160,12 @@ equivalent of using regexes to change a string in place."
     (assoc {:all-recs (map-selected recs cats)} :all-category cats)
     ))
 
+;; (jdbc/db-do-prepared-return-keys sth [1 2 3 4 5])
+
 (defn insert [params]
   (let [sth (jdbc/prepare-statement
              (jdbc/get-connection db)
-             ["insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"]
+             "insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"
              :return-keys true)
         
         recs (jdbc/db-do-prepared-return-keys
