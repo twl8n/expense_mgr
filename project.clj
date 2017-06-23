@@ -4,14 +4,15 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :plugins [[lein-ring "0.8.10"]
-            [lein-cljsbuild "1.0.5"]]
+            [lein-cljsbuild "1.0.5"]
+            [lein-ancient "0.6.10"]]
   :cljsbuild {:builds
               {:min {:source-paths ["src"]
                      :compiler {:output-to "out/main.js"
                                 :optimizations :advanced}}}}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/java.jdbc "0.7.0-alpha3"]
-                 ;; Whereever 0.3.5 came from, it is more than 2 years out of date.
+                 ;; Whereever org.clojure/java.jdbc "0.3.5" came from, it is more than 2 years out of date.
                  ;; [org.clojure/java.jdbc "0.3.5"]
                  [org.xerial/sqlite-jdbc "3.7.2"]
                  [de.ubercode.clostache/clostache "1.4.0"]
