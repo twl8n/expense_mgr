@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>List all</title>
+    <style type="text/css">
+      .table { display: table;
+      border-collapse:separate; 
+      border-spacing:0.2em;} 
+      .table>* { display: table-row; }
+      .table>*>* { display: table-cell; }
+    </style>
+  </head>
+  <body>
+    <a href="/app?action=show&id=1">Record 1</a>
+    <br>
+    Message: {{sys-msg}}
+    <p>
+        <div class="table">
+          <div>
+            <div>date</div><div>category</div><div>amount</div><div>mileage</div><div>notes</div><div></div>
+          </div>
+          {{#all-recs}}
+          <form action="" method="GET">
+            <input type="hidden" name="action" value="update-db">
+              <div>
+                <input type="hidden" name="id" value="{{id}}">
+                <input type="text" name="date" value="{{date}}"></div>
+              <div>
+                <select name="category">
+                  {{#all-category}}
+                  <option value="{{id}}" {{selected}}>{{name}}</option>
+                {{/all-category}}
+              </select>
+            </div>
+            <div><input type="text" name="amount" value="{{amount}}"></div>
+            <div><input type="text" name="mileage" value="{{mileage}}" ></div>
+            <div><input type="text" name="notes" value="{{notes}}" ></div>
+            <div>
+              <a href="/app?action=show&id={{id}}">Edit id {{id}}</a>
+              <input type="submit" name="submit">
+            </div>
+          </form>
+          {{/all-recs}}
+        </div>
+      <form action="" method="GET">
+        <input type="hidden" name="action" value="insert">
+        <table>
+          <tr>
+            <td>
+              <input type="hidden" name="id" value="">
+              <input type="text" name="date" value=""></td>
+            <td>
+              <select name="category">
+                {{#all-category}}
+                <option value="{{id}}">{{name}}</option>
+                {{/all-category}}
+              </select>
+            </td>
+            <td><input type="text" name="amount" value=""></td>
+            <td><input type="text" name="mileage" value="" ></td>
+            <td><input type="text" name="notes" value="" ></td>
+            <td>
+              <input type="submit" name="insert" value="insert">
+            </td>
+          </tr>
+        </table>
+      </form>
+  </body>
+</html>

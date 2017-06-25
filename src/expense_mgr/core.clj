@@ -114,12 +114,16 @@
 
 (defn update-db [params]
   (let [id (params "id")
-        title (params "title")
-        stars (params "stars")
-        desc (params "desc")]
+        date (params "date")
+        category (params "category")
+        amount (params "amount")
+        mileage (params "mileage")
+        notes (params "notes")]
     (cond (not (nil? (params "id")))
           (do
-            (jdbc/execute! db ["update entry set title=?, desc=?, stars=? where id=?" title desc stars id])))))
+            (jdbc/execute! db 
+                           ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
+                            date category amount mileage notes id])))))
 
 (defn pq [xx] (java.util.regex.Pattern/quote xx))
 
@@ -160,23 +164,20 @@ equivalent of using regexes to change a string in place."
     (assoc {:all-recs (map-selected recs cats)} :all-category cats)
     ))
 
-;; (jdbc/db-do-prepared-return-keys sth [1 2 3 4 5])
+;; {:last_insert_rowid() 12} The key really is :last_insert_rowid() with parens. The reader simply can't grok
+;; a key with parens, so we have to use keyword.
 
 (defn insert [params]
-  (let [sth (jdbc/prepare-statement
-             (jdbc/get-connection db)
-             "insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"
-             :return-keys true)
-        
-        recs (jdbc/db-do-prepared-return-keys
-              sth
-              [(params "date")
+  "map of params => integer record id."
+  (let [kmap (jdbc/db-do-prepared-return-keys
+              db
+              ["insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"
+               (params "date")
                (params "category")
                (params "amount")
                (params "mileage")
                (params "notes")])]
-    (prn "insert recs: " recs)
-    recs))
+    [{:id (get kmap (keyword "last_insert_rowid()"))}]))
 
 ;; (let [[_ pre body post] (re-matches #"(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$"
 ;; "pre{{for}}middle{{end}}post")]
@@ -219,29 +220,29 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         action (params "action")
         ras  request
         rmap (cond (= "show" action)
-                   (map #(assoc % :_msg (format "read %s from db" (get params "id"))) (show params))
+                   (map #(assoc % :sys-msg (format "read %s from db" (get params "id"))) (show params))
                    (= "choose" action)
                    (choose params)
                    (= "update-db" action)
                    (do 
                      (update-db params)
-                     (map #(assoc % :_msg "updated") (show params)))
+                     ;;(map #(assoc % :sys-msg "updated") (show params))
+                     (list-all params))
                    (= "list-all" action)
                    (list-all params)
                    (= "insert" action)
-                   (insert params))]
+                   (list-all (first (insert params))))]
     (prn "rmap: " rmap)
     #_(spit "rmap_debug.txt" (with-out-str (prn "rmap: " rmap)))
     (cond (some? rmap)
-          (cond (or (= "show" action)
-                    (= "update-db" action))
-                    {:status 200
-                     :headers {"Content-Type" "text/html"}
-                     :body (edit (first rmap))}
-                    (= "list-all" action)
-                    {:status 200
-                     :headers {"Content-Type" "text/html"}
-                     :body (fill-list-all (assoc rmap :sys-msg "list all"))})
+          (cond (= "show" action)
+                {:status 200
+                 :headers {"Content-Type" "text/html"}
+                 :body (edit (first rmap))}
+                (or (= "list-all" action) (= "insert" action) (= "update-db" action))
+                {:status 200
+                 :headers {"Content-Type" "text/html"}
+                 :body (fill-list-all (assoc rmap :sys-msg "list all"))})
           :else
           (ringu/content-type 
            (ringu/response 

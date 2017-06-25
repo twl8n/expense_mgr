@@ -1,10 +1,5 @@
 - insert or update all recs from list-all page.
 
-(def sth (jdbc/prepare-statement
-          (jdbc/get-connection db)
-          "insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"
-          {:return-keys true}))
-
 
 ;; Nice. Works, returns new index.
 (jdbc/insert! db "entry" {:date 1 :category 2 :amount 12.3 :mileage 4 :notes "foo"})
@@ -14,13 +9,18 @@
 (jdbc/insert! db "entry" ["date","category","amount","mileage","notes"] ["1" "2" "3" "4" "5"])
 =>(1)
 
-;; OMG works.
+;; OMG works, sth then db-do-prepared-return-keys.
 ;; https://github.com/clojure/java.jdbc
 ;;  sql-params is a vector containing a SQL string or PreparedStatement followed by parameters -- like other APIs in this library
 ;; sql-params = \[(sql-string|preparedstatement) vector \]
+(def sth (jdbc/prepare-statement
+          (jdbc/get-connection db)
+          "insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"
+          {:return-keys true}))
 (jdbc/db-do-prepared-return-keys db [sth "1" "2" "3" "4" "5"])
 =>{:last_insert_rowid() 6}
 
+;; Works. Not necessary to prepare the sql, in spite of the name.
 (jdbc/db-do-prepared-return-keys db ["insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)" "1" "2" "3" "4" "5"])
 =>{:last_insert_rowid() 7}
 
