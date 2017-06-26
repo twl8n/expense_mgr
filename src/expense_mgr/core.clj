@@ -98,14 +98,31 @@
                                          [:body :text]))
        (catch Exception e (println e))))
 
+(defn map-selected [outer inner]
+  "map inner and conditionally create :selected key, mapping the result into outer as :all-category."
+  (map (fn [omap]
+         (assoc omap :all-category
+                (map (fn [imap] 
+                       (if 
+                           (= (:category omap) (:id imap)) 
+                         (assoc imap :selected "selected")
+                         imap)) inner))) outer))
+
 ;; Can use SQL to set col "selected" as true when entry.category = category.id
 ;; Or can use clojure.
+
+;; name from category where category.id=entry.category
 (defn show [params]
   (let [id (get params "id")
-        output (jdbc/query db ["select * from entry where id=?" id])
-        cats (jdbc/query db ["select * from category order by name"])]
-    ;; (spit "show_debug.txt" (with-out-str (prn "id: " id " out: " output)))
-    (map #(assoc % :all-category cats) output)))
+        recs (jdbc/query
+              db 
+              ["select entry.*,(select name from category where category.id=entry.category) as category_name from entry where entry.id=?" id])
+        cats (jdbc/query
+              db 
+              ["select * from category order by name"])
+        all-rec (map-selected recs cats)]
+    all-rec))
+
 
 (defn choose [params]
   (let [title (params "title")]
@@ -121,13 +138,18 @@
         notes (params "notes")]
     (cond (not (nil? (params "id")))
           (do
+            (prn ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
+                  date category amount mileage notes id])
             (jdbc/execute! db 
                            ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
-                            date category amount mileage notes id])))))
+                            date category amount mileage notes id]))
+          :else (do (prn "no id in params:" params) 0))))
 
 (defn pq [xx] (java.util.regex.Pattern/quote xx))
 
-(defn cstr [str] (str/replace (with-out-str (pprint str)) #"\n" "\n"))
+(defn cstr
+  "Output pretty print of str. Unclear why I named this function cstr."
+  [str] (str/replace (with-out-str (pprint str)) #"\n" "\n"))
 
 (defn dev-init []
   (def myrec '({:id 1, :title "Hitachi Compact Impact Driver", :desc "The best tool I own", :stars nil, :isbn nil}))
@@ -146,23 +168,21 @@ equivalent of using regexes to change a string in place."
       ostr
       (recur (str/replace ostr (re-pattern (pq (str "{{" label "}}"))) (str value)) remainder))))
 
-(defn map-selected [outer inner]
-  "map inner and conditionally create :selected key, mapping the result into outer as :all-category."
-  (map (fn [omap]
-         (assoc omap :all-category
-                (map (fn [imap] 
-                       (if 
-                           (= (:category omap) (:id imap)) 
-                         (assoc imap :selected "selected")
-                         imap)) inner))) outer))
 
-(defn list-all [params]
-  (let [recs (jdbc/query db ["select * from entry order by id"])
-        cats (jdbc/query db ["select * from category order by name"])]
+(def list-all-sql
+  "select entry.*,(select name from category where category.id=entry.category) as category_name 
+from entry
+order by entry.id")
+
     ;; (map #(assoc % :all-category cats) recs)
     ;;(map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
-    (assoc {:all-recs (map-selected recs cats)} :all-category cats)
-    ))
+
+(defn list-all [params]
+  (let [recs (jdbc/query db [list-all-sql])
+        cats (jdbc/query db ["select * from category order by name"])
+        all-rec (assoc {:all-recs (map-selected recs cats)} :all-category cats)]
+    (prn "list-all recs: " recs)
+    all-rec))
 
 ;; {:last_insert_rowid() 12} The key really is :last_insert_rowid() with parens. The reader simply can't grok
 ;; a key with parens, so we have to use keyword.
@@ -232,8 +252,6 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                    (list-all params)
                    (= "insert" action)
                    (list-all (first (insert params))))]
-    (prn "rmap: " rmap)
-    #_(spit "rmap_debug.txt" (with-out-str (prn "rmap: " rmap)))
     (cond (some? rmap)
           (cond (= "show" action)
                 {:status 200
@@ -244,9 +262,11 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                  :headers {"Content-Type" "text/html"}
                  :body (fill-list-all (assoc rmap :sys-msg "list all"))})
           :else
-          (ringu/content-type 
-           (ringu/response 
-            (str "<html><body><pre>" (cstr ras) "</pre></body></html>")) "text/html"))))
+          ;; A redirect would make sense, maybe.
+          {:status 200
+           :headers {"Content-Type" "text/html"}
+           :body "<html><body>Unknown command. You probably want: <a href=\"app?action=list-all\">List all</a></body</html>"}
+          )))
 
 (def app
   (wrap-multipart-params (wrap-params handler)))

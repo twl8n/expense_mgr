@@ -17,9 +17,9 @@
         <tr>
           <td><input type="text" name="date" value="{{date}}" ></td>
           <td>
-            <select>
+            <select name="category">
               {{#all-category}}
-              <option value="{{id}} {{selected}}">{{name}}</option>
+              <option value="{{id}}" {{selected}}>{{name}}</option>
               {{/all-category}}
             </select>
           </td>

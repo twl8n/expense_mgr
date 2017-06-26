@@ -16,6 +16,8 @@ create table category (
         desc text
 );
 
+create unique index idx1 on category(name);
+
 -- many to many between entry and category. Each entry can have multiple categorys. Each category may be used
 -- on multiple entries.
 create table etocat (

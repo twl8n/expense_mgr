@@ -1,5 +1,17 @@
-- insert or update all recs from list-all page.
+- Validate critical data, esp. foreign keys. Add constraint?
 
+We don't want "11 " going into an integer field that should be 11.
+
+That can cause 2 hours of confusion.
+
+Both of these work in SQLite:
+
+select entry.*,(select name from category where id='2 ') as category_name from entry where id=10;
+select entry.*,(select name from category where id=2) as category_name from entry where id=10;
+
+But the first one won't work when called from jdbc, although it returns no error message.
+
+- x insert or update all recs from list-all page.
 
 ;; Nice. Works, returns new index.
 (jdbc/insert! db "entry" {:date 1 :category 2 :amount 12.3 :mileage 4 :notes "foo"})
