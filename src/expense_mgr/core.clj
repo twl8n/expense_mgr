@@ -111,18 +111,18 @@
 ;; Can use SQL to set col "selected" as true when entry.category = category.id
 ;; Or can use clojure.
 
+(def show-sql
+  "select entry.*,
+(select name from category where category.id=entry.category) as category_name 
+from entry 
+where entry.id=?")
+
 ;; name from category where category.id=entry.category
 (defn show [params]
   (let [id (get params "id")
-        recs (jdbc/query
-              db 
-              ["select entry.*,(select name from category where category.id=entry.category) as category_name from entry where entry.id=?" id])
-        cats (jdbc/query
-              db 
-              ["select * from category order by name"])
-        all-rec (map-selected recs cats)]
-    all-rec))
-
+        recs (jdbc/query db [show-sql id])
+        cats (jdbc/query db ["select * from category order by name"])]
+    (map-selected recs cats)))
 
 (defn choose [params]
   (let [title (params "title")]
@@ -130,6 +130,8 @@
       (jdbc/query db ["select * from entry where title like ? limit 1" (format "%%%s%%" title)]))))
 
 (defn update-db [params]
+  "Update entry. Return a list of a single integer which is the number of records effected, which is what
+  jdbc/execute!  returns. On error return list of zero."
   (let [id (params "id")
         date (params "date")
         category (params "category")
@@ -137,13 +139,12 @@
         mileage (params "mileage")
         notes (params "notes")]
     (cond (not (nil? (params "id")))
-          (do
-            (prn ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
-                  date category amount mileage notes id])
-            (jdbc/execute! db 
+          (prn "update-db execute:" (jdbc/execute! db 
                            ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
                             date category amount mileage notes id]))
-          :else (do (prn "no id in params:" params) 0))))
+          :else (do
+                  (prn "no id in params:" params)
+                  '(0)))))
 
 (defn pq [xx] (java.util.regex.Pattern/quote xx))
 
@@ -181,11 +182,10 @@ order by entry.id")
   (let [recs (jdbc/query db [list-all-sql])
         cats (jdbc/query db ["select * from category order by name"])
         all-rec (assoc {:all-recs (map-selected recs cats)} :all-category cats)]
-    (prn "list-all recs: " recs)
     all-rec))
 
-;; {:last_insert_rowid() 12} The key really is :last_insert_rowid() with parens. The reader simply can't grok
-;; a key with parens, so we have to use keyword.
+;; {:last_insert_rowid() 12} The key really is :last_insert_rowid() with parens. The clojure reader simply
+;; can't grok a key with parens, so we have to use keyword.
 
 (defn insert [params]
   "map of params => integer record id."
@@ -198,11 +198,6 @@ order by entry.id")
                (params "mileage")
                (params "notes")])]
     [{:id (get kmap (keyword "last_insert_rowid()"))}]))
-
-;; (let [[_ pre body post] (re-matches #"(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$"
-;; "pre{{for}}middle{{end}}post")]
-;; {:pre pre :body body :post post})
-;; {:pre "pre", :body "middle", :post "post"}
 
 (defn map-re-fill-list-all
   "Fill in a list of all records. The regex must use (?s) so that newline matches .

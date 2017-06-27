@@ -1,3 +1,27 @@
+- todo
+
+* list-all column sort
+
+* list-all column totals
+
+* reports by month, by year, by category.
+
+* table entry add personal/business column
+
+* row hover highlight row
+
+* edit row when click anywhere in row
+
+* row right click menu "edit,?"
+
+* shortcut navigation keys: tab, shift-tab, return shift-return
+
+* other date formats? date shortcuts?
+
+* ? break up category "equipment" into big stuff with serial number, small stuff?
+
+* Add page to insert/edit category data.
+
 - Validate critical data, esp. foreign keys. Add constraint?
 
 We don't want "11 " going into an integer field that should be 11.
