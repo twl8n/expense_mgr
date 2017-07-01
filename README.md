@@ -1,8 +1,12 @@
 - todo
 
-+ track current year, insert not using using_year.
+x track current year, insert not using using_year.
 
-* -6-1 causes date to be blank.
+x -6-1 causes date to be blank.
+
++ create report of sums by category
+
+select * from (select (select name from category where id=entry.category) as category,sum(amount) as sum from entry group by category) as inner order by sum;
 
 * normalize date from mm-dd to MM-DD require zero left pad.
 

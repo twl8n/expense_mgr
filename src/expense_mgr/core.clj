@@ -108,6 +108,21 @@
                          (assoc imap :selected "selected")
                          imap)) inner))) outer))
 
+(def cat-report-sql
+"select * from 
+        (select 
+        (select name from category where id=entry.category) as category,
+        sum(amount) as sum 
+        from entry 
+        group by category) 
+as inner order by sum")
+
+(defn cat-report []
+  (let [recs (jdbc/query db [cat-report-sql])]
+    {:rec-list recs}))
+
+;; name from category where category.id=entry.category
+
 ;; Can use SQL to set col "selected" as true when entry.category = category.id
 ;; Or can use clojure.
 
@@ -262,6 +277,12 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
   (let [template (slurp "list-all.html")]
     (render template rseq)))
 
+(defn render-any
+  "Render rseq to the template file template-name."
+  [rseq template-name]
+  (let [template (slurp template-name)]
+    (render template rseq)))
+
 (defn edit
   "Map each key value in the record against placeholders in the template to create a web page."
   [record]
@@ -293,7 +314,9 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                    (= "list-all" action)
                    (list-all working-params)
                    (= "insert" action)
-                   (list-all (first (insert working-params))))]
+                   (list-all (first (insert working-params)))
+                   (= "catreport" action)
+                   (cat-report))]
     (cond (some? rmap)
           (cond (= "show" action)
                 {:status 200
@@ -302,7 +325,11 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                 (or (= "list-all" action) (= "insert" action) (= "update-db" action))
                 {:status 200
                  :headers {"Content-Type" "text/html"}
-                 :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year))})
+                 :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year))}
+                (= "catreport" action)
+                {:status 200
+                 :headers {"Content-Type" "text/html"}
+                 :body (render-any (assoc rmap :sys-msg "Category report" :using_year using-year) "catreport.html")})
           :else
           ;; A redirect would make sense, maybe.
           {:status 200

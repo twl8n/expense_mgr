@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head><title>Category report</title></head>
+  <body>
+    <a href="/app?action=list-all">List all</a>
+    <br>
+    Message: {{sys-msg}}
+    <table>
+      <tr>
+        <td>Category</td><td>Sum</td>
+      </tr>
+      {{#rec-list}}
+      <tr>
+        <td>{{category}}</td>
+        <td>{{sum}}</td>
+      </tr>
+      {{/rec-list}}
+    </table>
+  </body>
+</html>
