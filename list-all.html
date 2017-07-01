@@ -22,7 +22,7 @@
           <div>date</div><div>category</div><div>amount</div><div>mileage</div><div>notes</div>
         </div>
         {{#all-recs}}
-        <form action="" method="GET">
+        <div>
           <div>
             {{date}}
           </div>
@@ -33,15 +33,16 @@
           <div>{{mileage}}</div>
           <div>{{notes}}</div>
           <div>
-            <a href="/app?action=show&id={{id}}">Edit id {{id}}</a>
+            <a href="/app?action=show&id={{id}}&using_year={{using_year}}">Edit id {{id}}</a>
           </div>
-        </form>
+        </div>
         {{/all-recs}}
         <form action="" method="GET">
           <input type="hidden" name="action" value="insert">
+          <input type="hidden" name="using_year" value="{{using_year}}">
           <div>
             <input type="hidden" name="id" value="">
-            <input autofocus="autofocus" type="text" name="date" value="">
+            <input autofocus="autofocus" type="text" name="date" value="{{using_year}}">
           </div>
           <div>
             <select name="category">

@@ -1,5 +1,13 @@
 - todo
 
++ track current year, insert not using using_year.
+
+* -6-1 causes date to be blank.
+
+* normalize date from mm-dd to MM-DD require zero left pad.
+
+* make entry id more obvious than "Edit id 21"
+
 * list-all column sort
 
 * list-all column totals
@@ -21,6 +29,8 @@
 * ? break up category "equipment" into big stuff with serial number, small stuff?
 
 * Add page to insert/edit category data.
+
+* create an app, a jar file, web menu to quit, app launches browser?
 
 - Validate critical data, esp. foreign keys. Add constraint?
 

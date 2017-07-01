@@ -129,6 +129,47 @@ where entry.id=?")
     (when (not (nil? title))
       (jdbc/query db ["select * from entry where title like ? limit 1" (format "%%%s%%" title)]))))
 
+
+;; using-year is a def that is an fn, and has a local, internal atom uy. Basically using-year is a closure. So
+;; that safe and good programming practice, maybe.
+
+(def using-year
+  (let [uy (atom "2017")]
+    (fn 
+      ([] @uy)
+      ([different-year]
+       (if (some? different-year)
+         (swap! uy (fn [xx] different-year))
+         @uy)))))
+
+(defn check-uy [cmap]
+  "Expect empty string for missing map values, not nil, because nil breaks re-matches."
+  (let [date (:date cmap)
+        uy (:using_year cmap)
+        full-match (re-matches #"^(\d{4})-\d{1,2}-\d{1,2}$" date)]
+    (cond (some? full-match)
+          (second full-match)
+          (not (empty? uy))
+          uy
+          :else "2017")))
+
+(defn smarter-date
+  "This is fine, but doesn't normalize dates. Probably better to tokenize dates, and reformat in a normal format."
+  [sdmap]
+  (let [date (:date sdmap)
+        uy (:using_year sdmap)
+        full-match (re-matches #"^(\d{4})-\d{1,2}-\d{1,2}$" date)]
+    (cond (some? full-match)
+          date
+          (re-matches #"^-+\d{1,2}-\d{1,2}$" date)
+          (str uy date)
+          (re-matches #"^\d{1,2}-\d{1,2}$" date)
+          (str uy "-" date))))
+
+(defn test-smarter-date []
+  [(smarter-date {:date "-06-01" :using_year "2001"})
+   (smarter-date {:date "06-01" :using_year "2001"})])
+
 (defn update-db [params]
   "Update entry. Return a list of a single integer which is the number of records effected, which is what
   jdbc/execute!  returns. On error return list of zero."
@@ -139,9 +180,9 @@ where entry.id=?")
         mileage (params "mileage")
         notes (params "notes")]
     (cond (not (nil? (params "id")))
-          (prn "update-db execute:" (jdbc/execute! db 
-                           ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
-                            date category amount mileage notes id]))
+          (jdbc/execute! db 
+                         ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
+                          date category amount mileage notes id])
           :else (do
                   (prn "no id in params:" params)
                   '(0)))))
@@ -228,34 +269,40 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         body (render template record)]
     body))
 
+;; todo: change params keys from strings to clj keywords.
 (defn handler 
   "Expense link manager."
   [request]
-  (let [params (:params request)
-        action (params "action")
+  (let [temp-params (:params request)
+        action (temp-params "action")
         ras  request
+        using-year (check-uy {:date (or (temp-params "date") "") :using_year (or (temp-params "using_year") "")})
+        ;; Add :using_year, replace "date" value with a better date value
+        working-params (merge temp-params
+                              {:using_year using-year
+                               "date" (smarter-date {:date (or (temp-params "date") "") :using_year using-year})})
         rmap (cond (= "show" action)
-                   (map #(assoc % :sys-msg (format "read %s from db" (get params "id"))) (show params))
+                   (map #(assoc % :sys-msg (format "read %s from db" (get working-params "id"))) (show working-params))
                    (= "choose" action)
-                   (choose params)
+                   (choose working-params)
                    (= "update-db" action)
                    (do 
-                     (update-db params)
-                     ;;(map #(assoc % :sys-msg "updated") (show params))
-                     (list-all params))
+                     (update-db working-params)
+                     ;;(map #(assoc % :sys-msg "updated") (show working-params))
+                     (list-all working-params))
                    (= "list-all" action)
-                   (list-all params)
+                   (list-all working-params)
                    (= "insert" action)
-                   (list-all (first (insert params))))]
+                   (list-all (first (insert working-params))))]
     (cond (some? rmap)
           (cond (= "show" action)
                 {:status 200
                  :headers {"Content-Type" "text/html"}
-                 :body (edit (first rmap))}
+                 :body (edit (assoc (first rmap) :using_year using-year))}
                 (or (= "list-all" action) (= "insert" action) (= "update-db" action))
                 {:status 200
                  :headers {"Content-Type" "text/html"}
-                 :body (fill-list-all (assoc rmap :sys-msg "list all"))})
+                 :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year))})
           :else
           ;; A redirect would make sense, maybe.
           {:status 200
