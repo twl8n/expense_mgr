@@ -98,15 +98,26 @@
                                          [:body :text]))
        (catch Exception e (println e))))
 
+;; outer is a map with a key :category_list, the value of which is a list of maps with key :id.
+;; Make a set of the :id values and if that id exists in the inner map, assoc :selected with the inner map
+
+;; This creates an inner map suitable for html <select>, or multi <select> now that we have 0..n categories
+;; per entry.
+
+;; Now that this is working, the let binding seem redundant. It might read better to simply inline
+;; the set function.
+
 (defn map-selected [outer inner]
-  "map inner and conditionally create :selected key, mapping the result into outer as :all-category."
+  "Map inner and conditionally assoc :selected key, mapping the result via assoc into outer
+  as :all-category. Add key :all-category to outer, and while setting :selected appropriately on each
+  iteration of :all-category. Map assoc, map conditional assoc."
   (map (fn [omap]
          (assoc omap :all-category
                 (map (fn [imap] 
-                       (if 
-                           (= (:category omap) (:id imap)) 
-                         (assoc imap :selected "selected")
-                         imap)) inner))) outer))
+                       (let [catset (set (mapv :id (:category_list omap)))]
+                         (if (contains? catset (:id imap)) 
+                           (assoc imap :selected "selected")
+                           imap))) inner))) outer))
 
 (def cat-report-sql
 "select * from 
@@ -117,9 +128,12 @@
         group by category) 
 as inner order by sum")
 
-(defn cat-report []
-  (let [recs (jdbc/query db [cat-report-sql])]
-    {:rec-list recs}))
+(defn cat-report
+  "The template expects fields 'category' and 'sum'."
+  []
+  (let [recs (jdbc/query db [cat-report-sql])
+        total (jdbc/query db ["select 'Total' as category, sum(amount) as sum from entry"])]
+    {:rec-list (concat recs total)}))
 
 ;; name from category where category.id=entry.category
 
@@ -179,6 +193,8 @@ where entry.id=?")
           (re-matches #"^-+\d{1,2}-\d{1,2}$" date)
           (str uy date)
           (re-matches #"^\d{1,2}-\d{1,2}$" date)
+          (str uy "-" date)
+          :else
           (str uy "-" date))))
 
 (defn test-smarter-date []
@@ -215,6 +231,7 @@ where entry.id=?")
 ;; [string map] returning modified string
 ;; (seq) the map into a sequence of k v
 ;; This is the "render" of something like clostache.
+
 (defn map-re
   "Replaced placeholders in the orig template with keys and values from the map remap. This is the functional 
 equivalent of using regexes to change a string in place."
@@ -226,18 +243,37 @@ equivalent of using regexes to change a string in place."
       (recur (str/replace ostr (re-pattern (pq (str "{{" label "}}"))) (str value)) remainder))))
 
 
+(def old-list-all-sql
+  "select entry.*,(select name from category where category.id=entry.category) as category_name 
+from entry
+order by entry.id")
+
 (def list-all-sql
   "select entry.*,(select name from category where category.id=entry.category) as category_name 
 from entry
 order by entry.id")
 
-    ;; (map #(assoc % :all-category cats) recs)
-    ;;(map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
+;; insert into etocat (eid,cid) (select id,category from entry);
+;; create table ecat as select id,category from entry;
+
+(def all-cats-sql
+  "select name as category_name,category.id from entry, category, etocat
+where 
+entry.id=etocat.eid and
+category.id=etocat.cid and entry.id=?
+order by category.id")
+
+(defn list-all-cats [eid]
+  {:category_list (jdbc/query db [all-cats-sql eid])})
+
+;; (map #(assoc % :all-category cats) recs)
+;; (map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
 
 (defn list-all [params]
-  (let [recs (jdbc/query db [list-all-sql])
+  (let [erecs (jdbc/query db [list-all-sql])
+        full-recs (map (fn [rec] (merge rec (list-all-cats (:id rec)))) erecs)
         cats (jdbc/query db ["select * from category order by name"])
-        all-rec (assoc {:all-recs (map-selected recs cats)} :all-category cats)]
+        all-rec (assoc {:all-recs (map-selected full-recs cats)} :all-category cats)]
     all-rec))
 
 ;; {:last_insert_rowid() 12} The key really is :last_insert_rowid() with parens. The clojure reader simply
@@ -290,6 +326,47 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         body (render template record)]
     body))
 
+(defn request-action [working-params action]
+  (cond (= "show" action)
+        (map #(assoc % :sys-msg (format "read %s from db" (get working-params "id"))) (show working-params))
+        (= "choose" action)
+        (choose working-params)
+        (= "update-db" action)
+        (do 
+          (update-db working-params)
+          ;;(map #(assoc % :sys-msg "updated") (show working-params))
+          (list-all working-params))
+        (= "list-all" action)
+        (list-all working-params)
+        (= "insert" action)
+        (list-all (first (insert working-params)))
+        (= "catreport" action)
+        (cat-report)))
+
+(defn reply-action
+  "Generate a response for some request."
+  [rmap action]
+  (cond (or (nil? rmap)
+            (nil? (some #{action} ["show" "list-all" "insert" "update-db" "catreport"])))
+        ;; A redirect would make sense, maybe.
+        {:status 200
+         :headers {"Content-Type" "text/html"}
+         :body (format
+                "<html><body>Unknown command: %s You probably want: <a href=\"app?action=list-all\">List all</a></body</html>"
+                action)}
+        (= "show" action)
+        {:status 200
+         :headers {"Content-Type" "text/html"}
+         :body (edit (assoc (first rmap) :using_year using-year))}
+        (or (= "list-all" action) (= "insert" action) (= "update-db" action))
+        {:status 200
+         :headers {"Content-Type" "text/html"}
+         :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year))}
+        (= "catreport" action)
+        {:status 200
+         :headers {"Content-Type" "text/html"}
+         :body (render-any (assoc rmap :sys-msg "Category report" :using_year using-year) "catreport.html")}))
+
 ;; todo: change params keys from strings to clj keywords.
 (defn handler 
   "Expense link manager."
@@ -302,40 +379,8 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         working-params (merge temp-params
                               {:using_year using-year
                                "date" (smarter-date {:date (or (temp-params "date") "") :using_year using-year})})
-        rmap (cond (= "show" action)
-                   (map #(assoc % :sys-msg (format "read %s from db" (get working-params "id"))) (show working-params))
-                   (= "choose" action)
-                   (choose working-params)
-                   (= "update-db" action)
-                   (do 
-                     (update-db working-params)
-                     ;;(map #(assoc % :sys-msg "updated") (show working-params))
-                     (list-all working-params))
-                   (= "list-all" action)
-                   (list-all working-params)
-                   (= "insert" action)
-                   (list-all (first (insert working-params)))
-                   (= "catreport" action)
-                   (cat-report))]
-    (cond (some? rmap)
-          (cond (= "show" action)
-                {:status 200
-                 :headers {"Content-Type" "text/html"}
-                 :body (edit (assoc (first rmap) :using_year using-year))}
-                (or (= "list-all" action) (= "insert" action) (= "update-db" action))
-                {:status 200
-                 :headers {"Content-Type" "text/html"}
-                 :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year))}
-                (= "catreport" action)
-                {:status 200
-                 :headers {"Content-Type" "text/html"}
-                 :body (render-any (assoc rmap :sys-msg "Category report" :using_year using-year) "catreport.html")})
-          :else
-          ;; A redirect would make sense, maybe.
-          {:status 200
-           :headers {"Content-Type" "text/html"}
-           :body "<html><body>Unknown command. You probably want: <a href=\"app?action=list-all\">List all</a></body</html>"}
-          )))
+        rmap (request-action working-params action)]
+    (reply-action rmap action)))
 
 (def app
   (wrap-multipart-params (wrap-params handler)))
@@ -349,8 +394,8 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
   (defonce server (ringa/run-jetty app {:port 8080 :join? false})))
 
 ;; Need -main for 'lien run', but it is ignored by 'lein ring'.
-;; (defn -main []
-;;   (ringa/run-jetty app {:port 8080}))
+(defn -main []
+  (ds))
 
 ;; https://stackoverflow.com/questions/39765943/clojure-java-jdbc-lazy-query
 ;; https://jdbc.postgresql.org/documentation/83/query.html#query-with-cursor

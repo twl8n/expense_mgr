@@ -29,7 +29,10 @@
             {{date}}
           </div>
           <div>
+            {{#category_list}}
             {{category_name}}
+            <br>
+            {{/category_list}}
           </div>
           <div>{{amount}}</div>
           <div>{{mileage}}</div>
@@ -44,7 +47,7 @@
           <input type="hidden" name="using_year" value="{{using_year}}">
           <div>
             <input type="hidden" name="id" value="">
-            <input autofocus="autofocus" type="text" name="date" value="{{using_year}}">
+            <input autofocus="autofocus" type="text" name="date" value="">
           </div>
           <div>
             <select name="category">

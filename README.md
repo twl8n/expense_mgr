@@ -1,10 +1,28 @@
 - todo
 
+* list-all by year, year+month
+
+* category editor
+
+* + multi-category tagging
+
++ fix list-all to merge erecs with list-all-cats on the :id of each rec
+
++ check/fix that map-selected is working to create multi selected menu, which really
+should be some alternate UI, probably muliple single selection <select> elements
+
+x update db, schema and data
+
+
+x fix -main to call (ds). Now we can "lein run" and the app runs. When the app is running, point a web browser at:
+
+http://localhost:8080/app?action=list-all
+
 x track current year, insert not using using_year.
 
 x -6-1 causes date to be blank.
 
-+ create report of sums by category
+x create report of sums by category
 
 select * from (select (select name from category where id=entry.category) as category,sum(amount) as sum from entry group by category) as inner order by sum;
 
