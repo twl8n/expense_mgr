@@ -4,11 +4,15 @@
 
 * category editor
 
-* + multi-category tagging
+* categories need to be in consistent order in list-all and edit (show) pages.
 
-+ fix list-all to merge erecs with list-all-cats on the :id of each rec
+* remove debug println's
 
-+ check/fix that map-selected is working to create multi selected menu, which really
+x multi-category tagging
+
+x fix list-all to merge erecs with list-all-cats on the :id of each rec
+
+x check/fix that map-selected is working to create multi selected menu, which really
 should be some alternate UI, probably muliple single selection <select> elements
 
 x update db, schema and data

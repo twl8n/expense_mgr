@@ -110,13 +110,13 @@
 (defn map-selected [outer inner]
   "Map inner and conditionally assoc :selected key, mapping the result via assoc into outer
   as :all-category. Add key :all-category to outer, and while setting :selected appropriately on each
-  iteration of :all-category. Map assoc, map conditional assoc."
+  iteration of :all-category. Map assoc, map conditional assoc. And :checked with value checked."
   (map (fn [omap]
          (assoc omap :all-category
                 (map (fn [imap] 
                        (let [catset (set (mapv :id (:category_list omap)))]
                          (if (contains? catset (:id imap)) 
-                           (assoc imap :selected "selected")
+                           (assoc imap :selected "selected" :checked "checked")
                            imap))) inner))) outer))
 
 (def cat-report-sql
@@ -135,6 +135,19 @@ as inner order by sum")
         total (jdbc/query db ["select 'Total' as category, sum(amount) as sum from entry"])]
     {:rec-list (concat recs total)}))
 
+;; insert into etocat (eid,cid) (select id,category from entry);
+;; create table ecat as select id,category from entry;
+
+(def all-cats-sql
+  "select name as category_name,category.id from entry, category, etocat
+where 
+entry.id=etocat.eid and
+category.id=etocat.cid and entry.id=?
+order by category.id")
+
+(defn list-all-cats [eid]
+  {:category_list (jdbc/query db [all-cats-sql eid])})
+
 ;; name from category where category.id=entry.category
 
 ;; Can use SQL to set col "selected" as true when entry.category = category.id
@@ -149,9 +162,10 @@ where entry.id=?")
 ;; name from category where category.id=entry.category
 (defn show [params]
   (let [id (get params "id")
-        recs (jdbc/query db [show-sql id])
+        erecs (jdbc/query db [show-sql id])
+        full-recs (map (fn [rec] (merge rec (list-all-cats (:id rec)))) erecs)
         cats (jdbc/query db ["select * from category order by name"])]
-    (map-selected recs cats)))
+    (map-selected full-recs cats)))
 
 (defn choose [params]
   (let [title (params "title")]
@@ -211,9 +225,20 @@ where entry.id=?")
         mileage (params "mileage")
         notes (params "notes")]
     (cond (not (nil? (params "id")))
-          (jdbc/execute! db 
-                         ["update entry set date=?,category=?,amount=?,mileage=?,notes=? where id=?"
-                          date category amount mileage notes id])
+          (do
+            (println "category: " (type (params "category")))
+            (jdbc/execute! db 
+                           ["update entry set date=?,amount=?,mileage=?,notes=? where id=?"
+                            date amount mileage notes id])
+            (jdbc/execute! db 
+                           ["delete from etocat where eid=?" id])
+            ;; Tricky. Lazy map doesn't work here. This is side-effect-y, so perhaps
+            ;; for or doseq would be more appropriate. That said, we might want the return value of execute!.
+            (mapv 
+             (fn [cid]
+               (println "inserting cid: " cid)
+               (jdbc/execute! db 
+                              ["insert into etocat (eid,cid) values (?,?)" id cid])) category))
           :else (do
                   (prn "no id in params:" params)
                   '(0)))))
@@ -253,18 +278,6 @@ order by entry.id")
 from entry
 order by entry.id")
 
-;; insert into etocat (eid,cid) (select id,category from entry);
-;; create table ecat as select id,category from entry;
-
-(def all-cats-sql
-  "select name as category_name,category.id from entry, category, etocat
-where 
-entry.id=etocat.eid and
-category.id=etocat.cid and entry.id=?
-order by category.id")
-
-(defn list-all-cats [eid]
-  {:category_list (jdbc/query db [all-cats-sql eid])})
 
 ;; (map #(assoc % :all-category cats) recs)
 ;; (map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
@@ -380,6 +393,8 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
                               {:using_year using-year
                                "date" (smarter-date {:date (or (temp-params "date") "") :using_year using-year})})
         rmap (request-action working-params action)]
+    ;; (println "action: " action "\nrmap:" rmap)
+    ;; (def aa rmap)
     (reply-action rmap action)))
 
 (def app

@@ -18,11 +18,18 @@
         <tr>
           <td><input type="text" name="date" value="{{date}}" ></td>
           <td>
-            <select name="category">
-              {{#all-category}}
-              <option value="{{id}}" {{selected}}>{{name}}</option>
-              {{/all-category}}
-            </select>
+            {{#all-category}}
+            <div>
+              <label for="category">{{name}}</label>
+              <input type="checkbox" name="category" value="{{id}}" {{checked}}>
+            </div>
+            {{/all-category}}
+
+            <!-- <select name="category" multiple> -->
+            <!--   {{#all-category}} -->
+            <!--   <option value="{{id}}" {{selected}}>{{name}}</option> -->
+            <!--   {{/all-category}} -->
+            <!-- </select> -->
           </td>
           <td><input type="text" name="amount" value="{{amount}}" ></td>
           <td><input type="text" name="mileage" value="{{mileage}}" ></td>
