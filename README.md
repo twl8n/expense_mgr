@@ -2,11 +2,18 @@
 
 * list-all by year, year+month
 
-* category editor
+* catgory UI maybe a cat field, comma separated, parsed by js and used to check checkboxes in real time.
+
+* category editor, allow categories to be deleted (and when deleted, remove from table etocat)
+
+* don't show deleted cats in UI. Modify SQL.
 
 * categories need to be in consistent order in list-all and edit (show) pages.
 
 * remove debug println's
+
+* category report needs better SQL to distinguish what cats to group by, and which are secondary
+  groups (like "personal" and "business")
 
 x multi-category tagging
 

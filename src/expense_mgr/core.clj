@@ -159,6 +159,110 @@ order by category.id")
 from entry 
 where entry.id=?")
 
+(comment
+
+  (def la (list-all {}))
+  (map #(show {"id" %}) [1 2 3 4])
+  (map :id (:all-recs la))
+
+  (map #(show {"id" %}) (map :id (:all-recs la)))
+
+  (def aids (map :id (:all-recs la)))
+  (mapv #(show {"id" %}) aids)
+
+  (require '[clojure.core.async
+             :as a
+             :refer [>! <! >!! <!! go chan buffer close! thread
+                     alts! alts!! timeout]])
+
+  ;; This is wrong. Doesn't create a good conn
+  ;; expense-mgr.core=> (jdbc/query conn ["select 1"])
+  ;; IllegalArgumentException db-spec org.sqlite.Conn@5c1e4766 is missing a required parameter  clojure.java.jdbc/get-connection (jdbc.clj:338)
+
+  (def conn {:connection (jdbc/get-connection db)})
+  (def results (jdbc/query conn ["SELECT * FROM devices"]))
+  (.close (:connection conn))
+
+  (def conn (jdbc/get-connection db))
+
+  (defn cini
+    "This works, but locks sqlite, no surprise. The channel takes in rh still work."
+    []
+    (def hi-chan (chan))
+    (mapv #(go (>! hi-chan (show-conn conn {"id" %}))) aids))
+
+  (defn rh
+    "This reads until no more, then returns."
+    []
+    (loop [hc nil]
+      (let [[input channel] (alts!! [hi-chan (timeout 10)])]
+        (if (nil? input)
+          hc
+          (recur (concat hc input))))))
+
+  (def xx (cini))
+  (def yy (rh))
+
+
+  (defn cini []
+    (def hi-chan (chan))
+    (doseq [n (range 1000)]
+      (go (>! hi-chan (str "hi " n)))))
+  
+
+  (defn rh
+    "This reads until no more, then returns."
+    []
+    (loop [hc 0]
+      (let [[input channel] (alts!! [hi-chan (timeout 10)])]
+        (if (nil? input)
+          (do
+            (close! hi-chan)
+            (prn "closing input"))
+          (do (prn hc input)
+              (recur (inc hc))))))
+    "done")
+  
+  ;; https://stackoverflow.com/questions/36236869/why-do-core-async-go-blocks-return-a-channel/36324031
+  (defn rh
+    "Must blocking take on the return value of go, or this hangs. The only reason to use a go block here is
+synchronization, that is: wait until this finishes to do something."
+    []
+    (<!! (go (loop [hc 0]
+          (let [[input channel] (alts! [hi-chan (timeout 10)])]
+            (if (nil? input)
+              (do
+                (prn "closing input")
+                (close! hi-chan))
+              (do (prn hc input)
+                  (recur (inc hc)))))))))
+
+  (defn hot-dog-machine-v2
+    [hot-dog-count]
+    (let [in (chan)
+          out (chan)]
+      (go (loop [hc hot-dog-count]
+            (if (> hc 0)
+              (let [input (<! in)]
+                (if (= 3 input)
+                  (do (>! out "hot dog")
+                      (recur (dec hc)))
+                  (do (>! out "wilted lettuce")
+                      (recur hc))))
+              (do (close! in)
+                  (close! out)))))
+      [in out]))
+  ;;end comment
+  )
+
+(defn show-conn [conn params]
+  (let [id (get params "id")
+        erecs (jdbc/query conn [show-sql id])
+        full-recs (map (fn [rec] (merge rec (list-all-cats (:id rec)))) erecs)
+        cats (jdbc/query conn ["select * from category order by name"])]
+    (map-selected full-recs cats)))
+
+
 ;; name from category where category.id=entry.category
 (defn show [params]
   (let [id (get params "id")
