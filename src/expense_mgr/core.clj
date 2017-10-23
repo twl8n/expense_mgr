@@ -161,6 +161,103 @@ where entry.id=?")
 
 (comment
 
+  ;; https://github.com/dakrone/clj-http
+  (require '[clj-http.client :as client])
+  (require '[clojure.core.async
+             :as a
+             :refer [>! <! >!! <!! go chan buffer close! thread
+                     alts! alts!! timeout]])
+  ;; 1149 ms
+  (time
+   (def yy
+     (mapv
+      #(client/get "http://laudeman.com/" {:query-params {"q" %}})
+      ["pie" "cake" "cookie" "flan"])))
+
+  ;; 200 to 300 ms
+  (time (def xx (client/get "http://laudeman.com/" {:query-params {"q" "foo, bar"}})))
+
+
+
+  (defn quick-requ [xx]
+    (client/get "http://laudeman.com/" {:query-params {"q" xx}}))
+
+  (def mychan (chan))
+  (go (>! mychan (quick-requ "pie")))
+  (alts!! [mychan (timeout 10000)])
+  
+  (defn use-chans
+    [tout]
+    (let [mychan (chan)]
+      (mapv #(go (>! mychan (quick-requ %)))
+            ["pie" "cake" "cookie" "flan"])
+      (loop [hc []]
+        (let [[input channel] (time (alts!! [mychan (timeout tout)]))]
+          (if (nil? input)
+            hc
+            (recur (conj hc input)))))))
+
+    (time (def zz (use-chans 10000)))
+
+  
+  (defn fixed-chans
+    "Take as many items as were put. The timeout is only a safety net."
+    [tout]
+    (let [mychan (chan)]
+      (mapv #(go (>! mychan (quick-requ %)))
+            ["pie" "cake" "cookie" "flan"])
+      (loop [hc []
+             ndx 0]
+        (let [[input channel] (time (alts!! [mychan (timeout tout)]))]
+          (if (>= ndx 3)
+            hc
+            (recur (conj hc input) (inc ndx)))))))
+
+  (time (def zz (fixed-chans 10000)))
+  ;; end comment
+  )
+
+(comment
+  (require '[clojure.core.async
+             :as a
+             :refer [>! <! >!! <!! go chan buffer close! thread
+                     alts! alts!! timeout]])
+  (def db
+    {:classname   "org.sqlite.JDBC"
+     :subprotocol "sqlite"
+     :subname     "expmgr.db"
+     })
+  
+  (def la (list-all {}))
+  (def aids (map :id (:all-recs la)))
+  
+  (def conn {:connection (jdbc/get-connection db)})
+
+  (defn cini
+    "You must use a single connection for all requests, or you'll lock SQLite."
+    []
+    (def hi-chan (chan))
+    (mapv #(go (>! hi-chan (show-conn conn {"id" %}))) aids))
+
+  (defn rh
+    "This reads until no more, then returns."
+    []
+    (loop [hc nil]
+      (let [[input channel] (alts!! [hi-chan (timeout 10)])]
+        (if (nil? input)
+          hc
+          (recur (concat hc input))))))
+
+  (def xx (cini))
+  (def yy (rh))
+  ;;  (.close (:connection conn))
+
+  ;; end comment
+  )
+
+(comment
+
+
   (def la (list-all {}))
   (map #(show {"id" %}) [1 2 3 4])
   (map :id (:all-recs la))
@@ -174,16 +271,15 @@ where entry.id=?")
              :as a
              :refer [>! <! >!! <!! go chan buffer close! thread
                      alts! alts!! timeout]])
-
-  ;; This is wrong. Doesn't create a good conn
-  ;; expense-mgr.core=> (jdbc/query conn ["select 1"])
-  ;; IllegalArgumentException db-spec org.sqlite.Conn@5c1e4766 is missing a required parameter  clojure.java.jdbc/get-connection (jdbc.clj:338)
-
+  
+  (def db
+    {:classname   "org.sqlite.JDBC"
+     :subprotocol "sqlite"
+     :subname     "expmgr.db"
+     })
   (def conn {:connection (jdbc/get-connection db)})
   (def results (jdbc/query conn ["SELECT * FROM devices"]))
   (.close (:connection conn))
-
-  (def conn (jdbc/get-connection db))
 
   (defn cini
     "This works, but locks sqlite, no surprise. The channel takes in rh still work."
@@ -252,6 +348,15 @@ synchronization, that is: wait until this finishes to do something."
               (do (close! in)
                   (close! out)))))
       [in out]))
+
+  ;; This is wrong. Doesn't create a good conn
+  ;; expense-mgr.core=> (jdbc/query conn ["select 1"])
+  ;; IllegalArgumentException db-spec org.sqlite.Conn@5c1e4766 is missing a required parameter  clojure.java.jdbc/get-connection (jdbc.clj:338)
+  
+  (def conn (jdbc/get-connection db))
+
+
+
   ;;end comment
   )
 

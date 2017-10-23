@@ -12,6 +12,7 @@
                                 :optimizations :advanced}}}}
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/core.async "0.3.443"]
+                 [clj-http "3.7.0"] ;; used in http request experiments
                  [org.clojure/java.jdbc "0.7.0-alpha3"]
                  ;; Whereever org.clojure/java.jdbc "0.3.5" came from, it is more than 2 years out of date.
                  ;; [org.clojure/java.jdbc "0.3.5"]
