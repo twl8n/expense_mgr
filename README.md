@@ -1,6 +1,13 @@
 - todo
 
-* list-all by year, year+month
+* x list-all year+month
+
+* allow date entry digits mmdd
+
+* every request-action must be identical structure. There seem to be at least
+two variants with either a list of records or [:all-recs (list of records)]. 
+
+* list-all by year
 
 * catgory UI maybe a cat field, comma separated, parsed by js and used to check checkboxes in real time.
 

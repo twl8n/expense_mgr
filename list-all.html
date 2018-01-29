@@ -18,6 +18,11 @@
     <a href="/app?action=catreport">Category report</a>
     <br>
     Message: {{sys-msg}}
+    <form action="" method="GET">
+      <input type="hidden" name="action" value="set_limit_date">
+      <input type="text" name="limit_date" value="{{limit-date}}">
+      <input type="submit" name="limit_month" value="Limit Month">
+    </form>
     <p>
       <div class="table">
         <div>
@@ -38,12 +43,13 @@
           <div>{{mileage}}</div>
           <div>{{notes}}</div>
           <div>
-            <a href="/app?action=show&id={{id}}&using_year={{using_year}}">Edit id {{id}}</a>
+            <a href="/app?action=show&id={{id}}&using_year={{using_year}}&limit_date={{limit-date}}">Edit id {{id}}</a>
           </div>
         </div>
         {{/all-recs}}
         <form action="" method="GET">
           <input type="hidden" name="action" value="insert">
+          <input type="hidden" name="limit_date" value="{{limit-date}}">
           <input type="hidden" name="using_year" value="{{using_year}}">
           <div>
             <input type="hidden" name="id" value="">

@@ -1,6 +1,6 @@
 (ns expense-mgr.core
   (:require [clojure.java.jdbc :as jdbc] ;; :refer :all]
-            [clojure.tools.namespace.repl :as tns]
+            [clojure.tools.namespace.repl :as tnr]
             [clojure.string :as str]
             [clojure.pprint :refer :all]
             [clostache.parser :refer [render]]
@@ -10,78 +10,6 @@
             [ring.middleware.multipart-params :refer [wrap-multipart-params]])
   (:gen-class))
 
-
-;; use destructuring to allow a 2 arg function to work in comp
-;; Not a great example since 2 arg fun really is 1 arg with destructuring
-;; maybe partial with a true 2 arg func.
-(def fx (comp (fn [[foo bar]] (format "a: %s b: %s" foo bar)) (fn foo [xx yy] (prn xx yy) [xx yy])))
-;; (fx 1 3)
-;; 1 3
-;; "a: 1 b: 3"
-;; quick-web.core=> 
-
-
-;; A true 2 arg fn2 called via partial apply where the arg is a vector with 2 items.
-
-(defn fn2 [foo bar] (format "a: %s b: %s" foo bar))
-(def fx (comp  (partial apply fn2) (fn foo [xx yy] (prn xx yy) [xx yy])))
-;; quick-web.core=> (fx 1 3)
-;; 1 3
-;; "a: 1 b: 3"
-;; quick-web.core=> 
-
-(defn mya
-  "Loop only for side effect. The str/replace is done, but the value is only printed, not saved. stracc and
-  rex are always passed back in the recur, and only the index is modified."
-  []
-  (loop [stracc "xxxa yyya yb" 
-         rex [#"x" #"y"]
-         index 0]
-    (if (> index 100)
-      (println "hit: " index)
-      (recur 
-       (let [cs (str/replace stracc (first rex) "zz")]
-         (println index "is string: " cs)
-         stracc)
-       rex
-       (inc index)))))
-
-(defn myb
-  "Same speed as (myz). Call the body in a let binding so we can return before the index is incremented an extra time. Return with
-  index 1 unlike (mya) and (myz) which return with index 2. Loop over regex seq rex (consuming rex), modifying string
-  accumulator stracc. Use an index."
-  []
-  (loop [stracc "xxxa yyya yb" 
-         rex [#"x" #"y"]
-         index 0]
-    (let [cs (str/replace stracc (first rex) "zz")
-          rexr (rest rex)]
-      (println index "is string: " cs)
-      (if (empty? rexr)
-        (do
-          ;; This print raises the timing on 10 invocations from 33 to 47 ms.
-          (println "Final index: " index)
-          cs)
-        (recur cs 
-               rexr
-               (inc index))))))
-  
-  (defn myz
-  "Loop over regex seq rex (consuming rex), modifying string accumulator stracc. Also inc an index so we can print debug info."
-  []
-  (loop [stracc "xxxa yyya yb" 
-         rex [#"x" #"y"]
-         index 0]
-    (if (empty? rex)
-        (do
-          ;; This print raises the timing on 10 invocations from 33 to 47 ms.
-          (println "Final index: " index)
-          stracc)
-      (recur (let [cs (str/replace stracc (first rex) "zz")]
-               (println index "is string: " cs)
-               cs)
-             (rest rex) 
-             (inc index)))))
 
 (def db
   {:classname   "org.sqlite.JDBC"
@@ -159,206 +87,6 @@ order by category.id")
 from entry 
 where entry.id=?")
 
-(comment
-
-  ;; https://github.com/dakrone/clj-http
-  (require '[clj-http.client :as client])
-  (require '[clojure.core.async
-             :as a
-             :refer [>! <! >!! <!! go chan buffer close! thread
-                     alts! alts!! timeout]])
-  ;; 1149 ms
-  (time
-   (def yy
-     (mapv
-      #(client/get "http://laudeman.com/" {:query-params {"q" %}})
-      ["pie" "cake" "cookie" "flan"])))
-
-  ;; 200 to 300 ms
-  (time (def xx (client/get "http://laudeman.com/" {:query-params {"q" "foo, bar"}})))
-
-
-
-  (defn quick-requ [xx]
-    (client/get "http://laudeman.com/" {:query-params {"q" xx}}))
-
-  (def mychan (chan))
-  (go (>! mychan (quick-requ "pie")))
-  (alts!! [mychan (timeout 10000)])
-  
-  (defn use-chans
-    [tout]
-    (let [mychan (chan)]
-      (mapv #(go (>! mychan (quick-requ %)))
-            ["pie" "cake" "cookie" "flan"])
-      (loop [hc []]
-        (let [[input channel] (time (alts!! [mychan (timeout tout)]))]
-          (if (nil? input)
-            hc
-            (recur (conj hc input)))))))
-
-    (time (def zz (use-chans 10000)))
-
-  
-  (defn fixed-chans
-    "Take as many items as were put. The timeout is only a safety net."
-    [tout]
-    (let [mychan (chan)]
-      (mapv #(go (>! mychan (quick-requ %)))
-            ["pie" "cake" "cookie" "flan"])
-      (loop [hc []
-             ndx 0]
-        (let [[input channel] (time (alts!! [mychan (timeout tout)]))]
-          (if (>= ndx 3)
-            hc
-            (recur (conj hc input) (inc ndx)))))))
-
-  (time (def zz (fixed-chans 10000)))
-  ;; end comment
-  )
-
-(comment
-  (require '[clojure.core.async
-             :as a
-             :refer [>! <! >!! <!! go chan buffer close! thread
-                     alts! alts!! timeout]])
-  (def db
-    {:classname   "org.sqlite.JDBC"
-     :subprotocol "sqlite"
-     :subname     "expmgr.db"
-     })
-  
-  (def la (list-all {}))
-  (def aids (map :id (:all-recs la)))
-  
-  (def conn {:connection (jdbc/get-connection db)})
-
-  (defn cini
-    "You must use a single connection for all requests, or you'll lock SQLite."
-    []
-    (def hi-chan (chan))
-    (mapv #(go (>! hi-chan (show-conn conn {"id" %}))) aids))
-
-  (defn rh
-    "This reads until no more, then returns."
-    []
-    (loop [hc nil]
-      (let [[input channel] (alts!! [hi-chan (timeout 10)])]
-        (if (nil? input)
-          hc
-          (recur (concat hc input))))))
-
-  (def xx (cini))
-  (def yy (rh))
-  ;;  (.close (:connection conn))
-
-  ;; end comment
-  )
-
-(comment
-
-
-  (def la (list-all {}))
-  (map #(show {"id" %}) [1 2 3 4])
-  (map :id (:all-recs la))
-
-  (map #(show {"id" %}) (map :id (:all-recs la)))
-
-  (def aids (map :id (:all-recs la)))
-  (mapv #(show {"id" %}) aids)
-
-  (require '[clojure.core.async
-             :as a
-             :refer [>! <! >!! <!! go chan buffer close! thread
-                     alts! alts!! timeout]])
-  
-  (def db
-    {:classname   "org.sqlite.JDBC"
-     :subprotocol "sqlite"
-     :subname     "expmgr.db"
-     })
-  (def conn {:connection (jdbc/get-connection db)})
-  (def results (jdbc/query conn ["SELECT * FROM devices"]))
-  (.close (:connection conn))
-
-  (defn cini
-    "This works, but locks sqlite, no surprise. The channel takes in rh still work."
-    []
-    (def hi-chan (chan))
-    (mapv #(go (>! hi-chan (show-conn conn {"id" %}))) aids))
-
-  (defn rh
-    "This reads until no more, then returns."
-    []
-    (loop [hc nil]
-      (let [[input channel] (alts!! [hi-chan (timeout 10)])]
-        (if (nil? input)
-          hc
-          (recur (concat hc input))))))
-
-  (def xx (cini))
-  (def yy (rh))
-
-
-  (defn cini []
-    (def hi-chan (chan))
-    (doseq [n (range 1000)]
-      (go (>! hi-chan (str "hi " n)))))
-  
-
-  (defn rh
-    "This reads until no more, then returns."
-    []
-    (loop [hc 0]
-      (let [[input channel] (alts!! [hi-chan (timeout 10)])]
-        (if (nil? input)
-          (do
-            (close! hi-chan)
-            (prn "closing input"))
-          (do (prn hc input)
-              (recur (inc hc))))))
-    "done")
-  
-  ;; https://stackoverflow.com/questions/36236869/why-do-core-async-go-blocks-return-a-channel/36324031
-  (defn rh
-    "Must blocking take on the return value of go, or this hangs. The only reason to use a go block here is
-synchronization, that is: wait until this finishes to do something."
-    []
-    (<!! (go (loop [hc 0]
-          (let [[input channel] (alts! [hi-chan (timeout 10)])]
-            (if (nil? input)
-              (do
-                (prn "closing input")
-                (close! hi-chan))
-              (do (prn hc input)
-                  (recur (inc hc)))))))))
-
-  (defn hot-dog-machine-v2
-    [hot-dog-count]
-    (let [in (chan)
-          out (chan)]
-      (go (loop [hc hot-dog-count]
-            (if (> hc 0)
-              (let [input (<! in)]
-                (if (= 3 input)
-                  (do (>! out "hot dog")
-                      (recur (dec hc)))
-                  (do (>! out "wilted lettuce")
-                      (recur hc))))
-              (do (close! in)
-                  (close! out)))))
-      [in out]))
-
-  ;; This is wrong. Doesn't create a good conn
-  ;; expense-mgr.core=> (jdbc/query conn ["select 1"])
-  ;; IllegalArgumentException db-spec org.sqlite.Conn@5c1e4766 is missing a required parameter  clojure.java.jdbc/get-connection (jdbc.clj:338)
-  
-  (def conn (jdbc/get-connection db))
-
-
-
-  ;;end comment
-  )
 
 (defn show-conn [conn params]
   (let [id (get params "id")
@@ -429,13 +157,12 @@ synchronization, that is: wait until this finishes to do something."
   jdbc/execute!  returns. On error return list of zero."
   (let [id (params "id")
         date (params "date")
-        category (params "category")
+        category (flatten [(params "category")])
         amount (params "amount")
         mileage (params "mileage")
         notes (params "notes")]
     (cond (not (nil? (params "id")))
           (do
-            (println "category: " (type (params "category")))
             (jdbc/execute! db 
                            ["update entry set date=?,amount=?,mileage=?,notes=? where id=?"
                             date amount mileage notes id])
@@ -445,7 +172,6 @@ synchronization, that is: wait until this finishes to do something."
             ;; for or doseq would be more appropriate. That said, we might want the return value of execute!.
             (mapv 
              (fn [cid]
-               (println "inserting cid: " cid)
                (jdbc/execute! db 
                               ["insert into etocat (eid,cid) values (?,?)" id cid])) category))
           :else (do
@@ -476,17 +202,33 @@ equivalent of using regexes to change a string in place."
       ostr
       (recur (str/replace ostr (re-pattern (pq (str "{{" label "}}"))) (str value)) remainder))))
 
-
-(def old-list-all-sql
+(def list-limit-sql
   "select entry.*,(select name from category where category.id=entry.category) as category_name 
 from entry
-order by entry.id")
+where date>=date(?,'start of month') and date<date(date(?,'start of month'),'+1 month')
+order by date desc")
+
+(defn list-limit [params]
+  (let [min-date (:limit-date params)
+        max-date (:limit-date params)
+        erecs (jdbc/query db [list-limit-sql min-date max-date])
+        full-recs (map (fn [rec] (merge rec (list-all-cats (:id rec)))) erecs)
+        cats (jdbc/query db ["select * from category order by name"])
+        all-rec (assoc {:all-recs (map-selected full-recs cats)} :all-category cats)]
+    all-rec))
+
+(defn prep-limit
+  "SQLite can do start of month, and +1 month, so pass in a date and let SQLite do all the
+  work. Alternatively, if we an make good min and max date, call list-limit, else fall back to calling
+  list-all."
+  [params]
+  (let [limit-date (get params "limit_date")]
+    (list-limit (assoc  params :limit-date limit-date))))
 
 (def list-all-sql
   "select entry.*,(select name from category where category.id=entry.category) as category_name 
 from entry
-order by entry.id")
-
+order by date desc")
 
 ;; (map #(assoc % :all-category cats) recs)
 ;; (map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
@@ -503,30 +245,26 @@ order by entry.id")
 
 (defn insert [params]
   "map of params => integer record id."
-  (let [kmap (jdbc/db-do-prepared-return-keys
+  (let [category (flatten [(params "category")])
+        kmap (jdbc/db-do-prepared-return-keys
               db
-              ["insert into entry (date,category,amount,mileage,notes) values (?,?,?,?,?)"
+              ["insert into entry (date,amount,mileage,notes) values (?,?,?,?)"
                (params "date")
-               (params "category")
                (params "amount")
                (params "mileage")
-               (params "notes")])]
-    [{:id (get kmap (keyword "last_insert_rowid()"))}]))
+               (params "notes")])
+        rowmap [{:id (get kmap (keyword "last_insert_rowid()"))}]
+        id (:id (first rowmap))]
+    (jdbc/execute! db 
+                   ["delete from etocat where eid=?" id])
+    ;; Tricky. Lazy map doesn't work here. This is side-effect-y, so perhaps
+    ;; for or doseq would be more appropriate. That said, we might want the return value of execute!.
+    (mapv 
+     (fn [cid]
+       (jdbc/execute! db 
+                      ["insert into etocat (eid,cid) values (?,?)" id cid])) category)
+    rowmap))
 
-(defn map-re-fill-list-all
-  "Fill in a list of all records. The regex must use (?s) so that newline matches .
-Initialize with empty string, map-re on the body, and accumulate all the body strings."
-  [rseq]
-  (let [template (slurp "list-all.html")
-        [all pre body post] (re-matches #"(?s)^(.*?)\{\{for\}\}(.*?)\{\{end\}\}(.*)$" template)]
-    (str (map-re pre {:_msg ["List all from db"]})
-         (loop [full ""
-                remap rseq]
-           (prn full)
-           (if (empty? remap)
-               full
-             (recur (str full (map-re body (first remap))) (rest remap))))
-         post)))
 
 (defn fill-list-all
   "Fill in a list of all records. The regex must use (?s) so that newline matches .
@@ -550,26 +288,32 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
 
 (defn request-action [working-params action]
   (cond (= "show" action)
-        (map #(assoc % :sys-msg (format "read %s from db" (get working-params "id"))) (show working-params))
+        (map #(assoc % :sys-msg (format "read %s from db" (get working-params "id")) :limit-date "2017-08-03") (show working-params))
         (= "choose" action)
         (choose working-params)
         (= "update-db" action)
         (do 
           (update-db working-params)
           ;;(map #(assoc % :sys-msg "updated") (show working-params))
-          (list-all working-params))
+          (if (some? (get working-params "limit_date"))
+            (prep-limit working-params)
+            (list-all working-params)))
+        (= "set_limit_date" action)
+        (prep-limit working-params)
         (= "list-all" action)
         (list-all working-params)
         (= "insert" action)
         (list-all (first (insert working-params)))
         (= "catreport" action)
-        (cat-report)))
+        (cat-report)
+        :else
+        {}))
 
 (defn reply-action
   "Generate a response for some request."
-  [rmap action]
+  [rmap action params]
   (cond (or (nil? rmap)
-            (nil? (some #{action} ["show" "list-all" "insert" "update-db" "catreport"])))
+            (nil? (some #{action} ["set_limit_date" "show" "list-all" "insert" "update-db" "catreport"])))
         ;; A redirect would make sense, maybe.
         {:status 200
          :headers {"Content-Type" "text/html"}
@@ -579,11 +323,11 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         (= "show" action)
         {:status 200
          :headers {"Content-Type" "text/html"}
-         :body (edit (assoc (first rmap) :using_year using-year))}
-        (or (= "list-all" action) (= "insert" action) (= "update-db" action))
+         :body (edit (assoc (first rmap) :using_year using-year :limit-date (:limit-date params)))}
+        (or (= "set_limit_date" action) (= "list-all" action) (= "insert" action) (= "update-db" action))
         {:status 200
          :headers {"Content-Type" "text/html"}
-         :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year))}
+         :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year :limit-date (get params "limit_date")))}
         (= "catreport" action)
         {:status 200
          :headers {"Content-Type" "text/html"}
@@ -601,10 +345,10 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         working-params (merge temp-params
                               {:using_year using-year
                                "date" (smarter-date {:date (or (temp-params "date") "") :using_year using-year})})
+
+        ;; rmap is a list of records from the db, will full category data
         rmap (request-action working-params action)]
-    ;; (println "action: " action "\nrmap:" rmap)
-    ;; (def aa rmap)
-    (reply-action rmap action)))
+    (reply-action rmap action (assoc working-params :limit-date (get working-params "limit_date")))))
 
 (def app
   (wrap-multipart-params (wrap-params handler)))
@@ -670,7 +414,7 @@ http://pesterhazy.karmafish.net/presumably/2015-05-25-getting-started-with-cloju
 
 (defn makefresh []
   (.stop server)
-  (tns/refresh)
+  (tnr/refresh)
   (ds)
   (.start server))
 
