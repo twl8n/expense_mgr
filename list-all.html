@@ -13,9 +13,13 @@
     </style>
   </head>
   <body>
-    <a href="/app?action=show&id=1">Record 1</a>
+    <a href="/app?action=show&id=1&limit_date={{limit-date}}">Record 1</a>
     <br>
     <a href="/app?action=catreport">Category report</a>
+    <br>
+    <a href="/app?action=list-limit&limit_date={{limit-date}}">List current month</a>
+    <br>
+    <a href="/app?action=list-all&limit_date={{limit-date}}">List all</a>
     <br>
     Message: {{sys-msg}}
     <form action="" method="GET">
@@ -43,14 +47,15 @@
           <div>{{mileage}}</div>
           <div>{{notes}}</div>
           <div>
-            <a href="/app?action=show&id={{id}}&using_year={{using_year}}&limit_date={{limit-date}}">Edit id {{id}}</a>
+            <a href="/app?action=show&id={{id}}&using_year={{using-year}}&using_month={{using-month}}&limit_date={{limit-date}}">Edit id {{id}}</a>
           </div>
         </div>
         {{/all-recs}}
         <form action="" method="GET">
           <input type="hidden" name="action" value="insert">
           <input type="hidden" name="limit_date" value="{{limit-date}}">
-          <input type="hidden" name="using_year" value="{{using_year}}">
+          <input type="hidden" name="using_year" value="{{using-year}}">
+          <input type="hidden" name="using_month" value="{{using-month}}">
           <div>
             <input type="hidden" name="id" value="">
             <input autofocus="autofocus" type="text" name="date" value="">

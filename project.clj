@@ -1,4 +1,4 @@
-(defproject expense_mgr "0.1.0-SNAPSHOT"
+(defproject expense_mgr ""
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "Eclipse Public License"
@@ -13,6 +13,7 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/core.async "0.3.443"]
                  [clj-http "3.7.0"] ;; used in http request experiments
+                 [clj-time "0.15.0"]
                  [org.clojure/java.jdbc "0.7.0-alpha3"]
                  ;; Whereever org.clojure/java.jdbc "0.3.5" came from, it is more than 2 years out of date.
                  ;; [org.clojure/java.jdbc "0.3.5"]
@@ -24,11 +25,15 @@
                  [ring/ring-core "1.2.1"]
                  [ring/ring-jetty-adapter "1.2.1"]]
   ;; You need a :ring with lein ring or lein ring server-headless
-  ;; However, you must send the request through the function that wraps the handler with
+  ;; New: Use :init to start up jetty with the handlers.
+  ;; Old: However, you must send the request through the function that wraps the handler with
   ;; with wrap-params, and any other wrap-* decorators.
-  ;; :ring {:handler expense-mgr.core/app}
+  ;; :ring {:handler expense-mgr.core/app
+  ;;        :init expense-mgr.core/ds}
 
   ;; Note hyphen, expense-mgr even though our path is expense_mgr
   :main ^:skip-aot expense-mgr.core
+  :uberjar-name "expense-mgr-standalone.jar"
+  :jar-name "expense-mgr.jar"
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})

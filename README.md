@@ -1,4 +1,52 @@
-- todo
+#### Curr
+
++ 2018-12-09 If params using_year and using_month are set and date is #"^\d$" then create yyyy-mm-$date
+else date must be a full date, and if not then use now() as date.
+
+curr-year and curr-month cannot store state in an atom because this is a web server, potentially multiuser,
+although current design is single user. Let's not make things worse by being stupid.
+
+#### Setup
+
+```
+cat schema.sql | sqlite3 expmgr.db
+```
+
+#### Running
+
+```
+lein uberbar
+cd ~/my-em-prod
+./deploy.sh
+java -jar expense-mgr-standalone.jar
+```
+
+In a web browser:
+`http://localhost:8080/app?action=list-all`
+
+#### Dump existing table to CSV
+
+```
+.mode csv
+.once category.csv
+select * from category;
+````
+
+#### Read CSV into an existing table
+
+This assumes that cagetory.csv does not have column names in the first line, and that table `category` already exists.
+
+```
+.mode csv
+.import category.csv category
+```
+
+#### todo
+
+* add limit_date={{limit-date}} to all links or generalize and send all config params every time.
+Or set a cookie?
+
+* + default to list-limit and keep limit-date set at all times, and carry limit-date around
 
 * x list-all year+month
 

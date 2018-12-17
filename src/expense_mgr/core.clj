@@ -1,5 +1,7 @@
 (ns expense-mgr.core
   (:require [clojure.java.jdbc :as jdbc] ;; :refer :all]
+            [clj-time.core :as time]
+            [clj-time.format :as format]
             [clojure.tools.namespace.repl :as tnr]
             [clojure.string :as str]
             [clojure.pprint :refer :all]
@@ -109,48 +111,73 @@ where entry.id=?")
     (when (not (nil? title))
       (jdbc/query db ["select * from entry where title like ? limit 1" (format "%%%s%%" title)]))))
 
+(defn good-year
+  "Arg must be a 4 digit string, all digits."
+  [ystr]
+  (some? (re-matches #"^\d{4}$" (str ystr))))
+
+(defn good-month
+  "Arg must be a 2 char str, leading zero as necessary."
+  [mstr]
+    (some? (re-matches #"0[1-9]|1[0-2]" (str mstr))))
 
 ;; using-year is a def that is an fn, and has a local, internal atom uy. Basically using-year is a closure. So
 ;; that safe and good programming practice, maybe.
 
-(def using-year
-  (let [uy (atom "2017")]
+;; Was using_ym or using-ym, but I don't see it being used as a function call.
+(def curr-year-xx
+  (let [ux (atom "2017")]
     (fn 
-      ([] @uy)
-      ([different-year]
-       (if (some? different-year)
-         (swap! uy (fn [xx] different-year))
-         @uy)))))
+      ([] @ux)
+      ([yy]
+       (if (good-year yy)
+         (reset! ux yy)
+         @ux)))))
+
+(def curr-month-xx
+  (let [ux (atom "01")]
+    (fn 
+      ([] @ux)
+      ([mm]
+       (if (good-month mm)
+         (reset! ux mm)
+         @ux)))))
+
 
 (defn check-uy [cmap]
-  "Expect empty string for missing map values, not nil, because nil breaks re-matches."
+  "Expect empty string for missing map values, not nil, because nil breaks re-matches. Return year and month
+  sets curr-year and curr-month."
   (let [date (:date cmap)
-        uy (:using_year cmap)
-        full-match (re-matches #"^(\d{4})-\d{1,2}-\d{1,2}$" date)]
-    (cond (some? full-match)
-          (second full-match)
-          (not (empty? uy))
-          uy
-          :else "2017")))
+        uy (:using-year cmap)
+        um (:using-month cmap)
+        [_ myear mmonth _] (re-matches #"^(\d{4})-(\d{1,2})-(\d{1,2})$" date)]
+    (cond (and (seq myear) (seq mmonth))
+          (do
+            (prn (format "check-uy good date: %s returning: %s %s" date myear mmonth))
+            [myear mmonth])
+          (and (seq uy) (seq um))
+          [uy um]
+          :else
+          ["2018" "01"])))
+
+;; We only accept full date or day-of-month as a short cut in the current year and month
 
 (defn smarter-date
   "This is fine, but doesn't normalize dates. Probably better to tokenize dates, and reformat in a normal format."
   [sdmap]
   (let [date (:date sdmap)
-        uy (:using_year sdmap)
+        uy (:using-year sdmap)
+        um (:using-month sdmap)
         full-match (re-matches #"^(\d{4})-\d{1,2}-\d{1,2}$" date)]
-    (cond (some? full-match)
-          date
-          (re-matches #"^-+\d{1,2}-\d{1,2}$" date)
-          (str uy date)
-          (re-matches #"^\d{1,2}-\d{1,2}$" date)
-          (str uy "-" date)
-          :else
-          (str uy "-" date))))
+    (prn "sd uy " uy " um " um " date " date)
+    (cond (some? full-match) date
+          ;; Crazy ass left padding. Trivial in other languages.
+          (re-matches #"^\d{1,2}$" date) (format "%s-%s-%s" uy um (second (re-matches #".*?(\d{1,2})" (str "00" date))))
+          :else (format "%s-%s-01" uy um))))
 
 (defn test-smarter-date []
-  [(smarter-date {:date "-06-01" :using_year "2001"})
-   (smarter-date {:date "06-01" :using_year "2001"})])
+  [(smarter-date {:date "-06-01" :using-year "2001"})
+   (smarter-date {:date "06-01" :using-year "2001"})])
 
 (defn update-db [params]
   "Update entry. Return a list of a single integer which is the number of records effected, which is what
@@ -208,7 +235,9 @@ from entry
 where date>=date(?,'start of month') and date<date(date(?,'start of month'),'+1 month')
 order by date desc")
 
-(defn list-limit [params]
+(defn list-limit
+  "List records for :limit-date."
+  [params]
   (let [min-date (:limit-date params)
         max-date (:limit-date params)
         erecs (jdbc/query db [list-limit-sql min-date max-date])
@@ -217,13 +246,6 @@ order by date desc")
         all-rec (assoc {:all-recs (map-selected full-recs cats)} :all-category cats)]
     all-rec))
 
-(defn prep-limit
-  "SQLite can do start of month, and +1 month, so pass in a date and let SQLite do all the
-  work. Alternatively, if we an make good min and max date, call list-limit, else fall back to calling
-  list-all."
-  [params]
-  (let [limit-date (get params "limit_date")]
-    (list-limit (assoc  params :limit-date limit-date))))
 
 (def list-all-sql
   "select entry.*,(select name from category where category.id=entry.category) as category_name 
@@ -233,7 +255,9 @@ order by date desc")
 ;; (map #(assoc % :all-category cats) recs)
 ;; (map #(if (= (:category %) (:id %)) (assoc % :selected 1) %)  [{:foo 1} {:foo 2}])
 
-(defn list-all [params]
+(defn list-all
+  "List all records, for all dates."
+  [params]
   (let [erecs (jdbc/query db [list-all-sql])
         full-recs (map (fn [rec] (merge rec (list-all-cats (:id rec)))) erecs)
         cats (jdbc/query db ["select * from category order by name"])
@@ -286,72 +310,130 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
         body (render template record)]
     body))
 
-(defn request-action [working-params action]
+(defn request-action
+  [working-params action]
   (cond (= "show" action)
-        (map #(assoc % :sys-msg (format "read %s from db" (get working-params "id")) :limit-date "2017-08-03") (show working-params))
+        (map #(assoc % :sys-msg (format "read id %s from db" (get working-params "id"))) (show working-params))
         (= "choose" action)
         (choose working-params)
         (= "update-db" action)
         (do 
           (update-db working-params)
-          ;;(map #(assoc % :sys-msg "updated") (show working-params))
-          (if (some? (get working-params "limit_date"))
-            (prep-limit working-params)
-            (list-all working-params)))
+          (list-limit working-params))
         (= "set_limit_date" action)
-        (prep-limit working-params)
+        (list-limit working-params)
+        (= "list-limit" action)
+        (list-limit working-params)
         (= "list-all" action)
         (list-all working-params)
         (= "insert" action)
-        (list-all (first (insert working-params)))
+        (do
+          (insert working-params)
+          (list-limit working-params))
         (= "catreport" action)
         (cat-report)
         :else
         {}))
 
+;; Routing happens here. Note two (or) clauses. The first is a safety net, the second is the real thing.
+
 (defn reply-action
-  "Generate a response for some request."
+  "Generate a response for some request. Params is working-params, which has injected params for the current request."
   [rmap action params]
   (cond (or (nil? rmap)
-            (nil? (some #{action} ["set_limit_date" "show" "list-all" "insert" "update-db" "catreport"])))
+            (nil? (some #{action} ["set_limit_date" "show" "list-all" "list-limit" "insert" "update-db" "catreport"])))
         ;; A redirect would make sense, maybe.
         {:status 200
          :headers {"Content-Type" "text/html"}
          :body (format
-                "<html><body>Unknown command: %s You probably want: <a href=\"app?action=list-all\">List all</a></body</html>"
+                "<html><body>Unknown command: %s You probably want: <a href=\"app?action=list-limit\">List limit</a></body</html>"
                 action)}
         (= "show" action)
         {:status 200
          :headers {"Content-Type" "text/html"}
-         :body (edit (assoc (first rmap) :using_year using-year :limit-date (:limit-date params)))}
-        (or (= "set_limit_date" action) (= "list-all" action) (= "insert" action) (= "update-db" action))
+         :body (edit (assoc (first rmap)
+                            :using-year (:using-year params)
+                            :using-month (:using-month params)
+                            :limit-date (:limit-date params)))}
+        (or (= "set_limit_date" action) (= "list-limit" action) (= "list-all" action) (= "insert" action) (= "update-db" action))
         {:status 200
          :headers {"Content-Type" "text/html"}
-         :body (fill-list-all (assoc rmap :sys-msg "list all" :using_year using-year :limit-date (get params "limit_date")))}
+         :body (fill-list-all (assoc rmap
+                                     :sys-msg (format "xlist all %s" params)
+                                     :using-year (:using-year params)
+                                     :using-month (:using-month params) 
+                                     :limit-date (:limit-date params)))}
         (= "catreport" action)
         {:status 200
          :headers {"Content-Type" "text/html"}
-         :body (render-any (assoc rmap :sys-msg "Category report" :using_year using-year) "catreport.html")}))
+         :body (render-any (assoc rmap
+                                  :sys-msg "Category report"
+                                  :using-year (:using-year params)
+                                  :using-month (:using-month params)) "catreport.html")}))
+
+;; First string is the output format, which is also a supported input format.
+;; Other strings are supported input formats.
+(def multi-parser
+  (format/formatter
+   (time/default-time-zone)
+   "YYYY-MM-dd" "YYYY/dd/MM" "YYYY MM dd" "YYYY-MM" "YYYY MM"))
+
+;; (new java.util.Date "01 Jan 2018")
+;; Proof that Java programmers are insane:
+;; year-1900, month is zero based, day is one based.
+;; (new java.util.Date 118 0 1) 
+(defn check-limit-date
+  [params]
+  (let [rdate (get params "date")
+        pld (get params "limit_date")
+        ld (if (seq rdate)
+             (str/replace pld #"..$" (format "%02d" (Integer. rdate)))
+             pld)]
+    
+    (if (seq ld)
+      (do
+        (prn "using ld: " ld)
+        (format/unparse multi-parser (format/parse multi-parser ld)))
+      (.format (java.text.SimpleDateFormat. "YYYY-MM-dd") (new java.util.Date)))))
+
+;; expense-mgr.core=> 2018-12-10 21:28:40.850:WARN:oejs.AbstractHttpConnection:/app?
+;; action=insert&limit_date=2017-01-22&using_year=&id=&date=24&category=3&amount=1.50&mileage=&notes=flkjf&insert=insert
+;; java.util.FormatFlagsConversionMismatchException: Conversion = s, Flags = 0
 
 ;; todo: change params keys from strings to clj keywords.
+;; (reduce-kv #(assoc %1 %2 (clojure.string/trim %3))  {} {:foo " stuff"})
+;; (reduce-kv (fn [mm kk vv] (assoc mm kk (clojure.string/trim vv))) {} {:foo " stuff"})
 (defn handler 
   "Expense link manager."
   [request]
-  (let [temp-params (:params request)
-        action (temp-params "action")
-        ras  request
-        using-year (check-uy {:date (or (temp-params "date") "") :using_year (or (temp-params "using_year") "")})
-        ;; Add :using_year, replace "date" value with a better date value
-        working-params (merge temp-params
-                              {:using_year using-year
-                               "date" (smarter-date {:date (or (temp-params "date") "") :using_year using-year})})
-
-        ;; rmap is a list of records from the db, will full category data
-        rmap (request-action working-params action)]
-    (reply-action rmap action (assoc working-params :limit-date (get working-params "limit_date")))))
+  (if (empty? (:params request))
+    nil
+    (let [temp-params (reduce-kv #(assoc %1 %2 (clojure.string/trim %3))  {} (:params request))
+          _ (prn "tp: " temp-params)
+          action (get temp-params "action")
+          ras  request
+          limit-date (check-limit-date temp-params)
+          [using-year using-month] (check-uy {:date (or limit-date (get temp-params "date") "")
+                                              :using-year (or (get temp-params "using_year") "")
+                                              :using-month (or (get temp-params "using_month") "")})
+          _ (prn "calc limit-date: " limit-date " ld: " (get temp-params "limit_date") " date: " (get temp-params "date") " uy: " using-year " um: " using-month)
+          ;; Add :using-year, replace "date" value with a better date value
+          working-params (merge temp-params
+                                {:using-year using-year
+                                 :using-month using-month
+                                 :limit-date limit-date
+                                 "date" (or limit-date (get temp-params "date"))})
+          ;; rmap is a list of records from the db, will full category data
+          rmap (request-action working-params action)]
+      (prn "wp: " working-params)
+      (reply-action rmap action working-params))))
 
 (def app
   (wrap-multipart-params (wrap-params handler)))
+
+;; Only if using compojure
+;; (defroutes app 
+;;   (GET "/action" [] (wrap-multipart-params (wrap-params handler))))
 
 ;; https://stackoverflow.com/questions/2706044/how-do-i-stop-jetty-server-in-clojure
 ;; example
@@ -416,5 +498,6 @@ http://pesterhazy.karmafish.net/presumably/2015-05-25-getting-started-with-cloju
   (.stop server)
   (tnr/refresh)
   (ds)
-  (.start server))
+  (.start server)
+  )
 
