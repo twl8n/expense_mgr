@@ -14,15 +14,22 @@ cat schema.sql | sqlite3 expmgr.db
 
 #### Running
 
+This is untested:
+
 ```
-lein uberbar
-cd ~/my-em-prod
-./deploy.sh
+lein uberjar
+cd ..
+mkdir my-em-prod
+cd my-em-prod
+../expense_mgr/deploy.sh
 java -jar expense-mgr-standalone.jar
 ```
 
 In a web browser:
-`http://localhost:8080/app?action=list-all`
+
+http://localhost:8080/app?action=list-all
+
+http://localhost:8080/app?action=list-limit&limit_date=2018-01-01
 
 #### Dump existing table to CSV
 
@@ -36,12 +43,126 @@ select * from category;
 
 This assumes that cagetory.csv does not have column names in the first line, and that table `category` already exists.
 
-```
+```sql
 .mode csv
 .import category.csv category
+create table import2015 (
+                     date text,
+                     amount double,
+                     notes text);
+.mode csv
+.import 2015-insert.sql import2015
+insert into entry (date,amount,notes) select date,amount,notes from import2015;
+
+select count(*)
+from 
+(
+create table fix_date as 
+ select entry.id,entry.date,ii.date,ii.amount,entry.amount,ii.notes,entry.notes
+from entry, import2015 ii
+where
+strftime("%Y-%m",ii.date) = strftime("%Y-%m",entry.date)
+and strftime("%d",entry.date) = '01'
+-- and strftime("%Y-%m",ii.date) = '2015-11'
+and ii.amount=entry.amount
+ and ii.notes=entry.notes
+ ;
+-- group by entry.date,ii.date,ii.amount,entry.amount,ii.notes,entry.notes
+order by ii.date);
+
+
+update fix_date set date="date:1";
+
+
+select count(*) from (
+select date,(select date from fix_date fd where fd.id=entry.id) from entry where id in (select id from fix_date)
+);
+
+update entry set date=(select date from fix_date fd where fd.id=entry.id)
+where exists (select date from fix_date fd where fd.id=entry.id);
+
+select changes();
+
+
+(select ii.date from import2015 ii where
+strftime("%Y-%m",ii.date) = strftime("%Y-%m",entry.date)
+and ii.amount=entry.amount
+and ii.notes=entry.notes)
+where strftime("%Y-%m",date) = '2015-11';
+
+-- Very broken. Second column is always the same.
+select date,(select date from fix_date fd where fd.id=id) from entry where id in (select id from fix_date);
+
+
 ```
 
+-- Sample quick import record
+-- 2015-08-24,46.41,exxon lovingston
+
+
 #### todo
+
+* "parsing limit_date: " "2018"
+2019-04-06 10:37:47.254:WARN:oejs.AbstractHttpConnection:/app?action=set_limit_date&limit_date=2018&limit_month=Limit+Month
+java.lang.IllegalArgumentException: Invalid format: "2018" is too short
+
+* limit date 2016 does not default to 2016-01 but throws exception
+
+"parsing limit_date: " "2016"
+2018-12-29 13:21:33.632:WARN:oejs.AbstractHttpConnection:/app?action=set_limit_date&limit_date=2016&limit_month=Limit+Month
+java.lang.IllegalArgumentException: Invalid format: "2016" is too short
+...
+	at expense_mgr.core$check_limit_date.invokeStatic(core.clj:419)
+
+- deal with this:
+
+http://localhost:8080/app?action=foo
+
+"tp: " {"action" "foo"}
+2018-12-29 12:47:54.453:WARN:oejs.AbstractHttpConnection:/app?action=foo
+java.lang.NullPointerException
+...
+	at expense_mgr.core$is_good_date.invokeStatic(core.clj:148)
+
+- Update check-limit-date to handle this:
+
+"tp: " {"id" "", "action" "insert", "using_month" "11", "amount" "4.0", "insert" "insert", "date" "xx", "category" "2", "notes" "", "limit_date" "2016-11-02", "mileage" "", "using_year" "2016"}
+
+2018-12-29 13:08:35.920:WARN:oejs.AbstractHttpConnection:/app?action=insert&limit_date=2016-11-02&using_year=2016&using_month=11&id=&date=xx&category=2&amount=4.0&mileage=&notes=&insert=insert
+java.lang.NumberFormatException: For input string: "xx"
+...
+	at expense_mgr.core$check_limit_date.invokeStatic(core.clj:410)
+
+"tp: " {"action" "set_limit_date", "limit_date" "2015-17", "limit_month" "Limit Month"}
+"using ld: " "2015-17"
+2018-12-29 10:23:04.079:WARN:oejs.AbstractHttpConnection:/app?action=set_limit_date&limit_date=2015-17&limit_month=Limit+Month
+org.joda.time.IllegalFieldValueException: Cannot parse "2015-17": Value 17 for monthOfYear must be in the range [1,12]
+
+x (working params date "or" wrong order) SQL date always becomes limit_date
+
+http://localhost:8080/app?action=update-db&id=613&limit_date=2015-10-01&using_year=2015&date=2015-10-13&category=30&amount=17.08&mileage=&notes=gas&submit=Save
+
+action: update-db params: {\"id\" \"613\", \"action\" \"update-db\", :limit-date \"2015-10-01\", :using-month \"10\", \"submit\" \"Save\", \"amount\" \"17.08\", :using-year \"2015\", \"date\" \"2015-10-01\", \"category\" \"30\", \"notes\" \"gas\", \"limit_date\" \"2015-10-01\", \"mileage\" \"\", \"using_year\" \"2015\"}"
+
+* Change limit-date to year/month of edited record.
+
+* Add *.html to resources/ so they are included in the uberjar
+
+* Add a default route instead of 404, or change the 404 page.
+
+x Bug
+
+2018-12-28 21:45:23.910:WARN:oejs.AbstractHttpConnection:/app?action=update-db&id=659&limit_date=2015-02-28&using_year=2015&date=2015-02-27&category=38&amount=43.43&mileage=&notes=gas&submit=Save
+java.lang.NumberFormatException: For input string: "2015-02-27"
+	at java.lang.NumberFormatException.forInputString(NumberFormatException.java:65)
+	at java.lang.Integer.parseInt(Integer.java:580)
+...
+	at expense_mgr.core$check_limit_date.invokeStatic(core.clj:390)
+	at expense_mgr.core$check_limit_date.invoke(core.clj:385)
+	at expense_mgr.core$handler.invokeStatic(core.clj:415)
+	at expense_mgr.core$handler.invoke(core.clj:406)
+
+* add unit tests for check-limit-date where rdate is various strings
 
 * add limit_date={{limit-date}} to all links or generalize and send all config params every time.
 Or set a cookie?

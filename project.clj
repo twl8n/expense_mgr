@@ -32,7 +32,8 @@
   ;;        :init expense-mgr.core/ds}
 
   ;; Note hyphen, expense-mgr even though our path is expense_mgr
-  :main ^:skip-aot expense-mgr.core
+  ;; This didn't fix/break `java -jar ...` ^:skip-aot 
+  :main expense-mgr.core
   :uberjar-name "expense-mgr-standalone.jar"
   :jar-name "expense-mgr.jar"
   :target-path "target/%s"

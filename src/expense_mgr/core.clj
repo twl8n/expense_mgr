@@ -143,6 +143,21 @@ where entry.id=?")
          (reset! ux mm)
          @ux)))))
 
+(defn truthy-string
+  "True for non-blank strings."
+  [arg]
+  (if (= (str (type arg)) "class java.lang.String")
+    (not (clojure.string/blank? arg))
+    false))
+
+(defn is-good-date
+  [str]
+  (if (truthy-string str)
+    (let [[_ matched-year matched-month matched-day] (re-matches #"^(\d{4})-(\d{1,2})-(\d{1,2})$" str)]
+      (if (and (seq matched-year) (seq matched-month) (seq matched-day))
+        [matched-year matched-month matched-day]
+        []))
+    []))
 
 (defn check-uy [cmap]
   "Expect empty string for missing map values, not nil, because nil breaks re-matches. Return year and month
@@ -340,6 +355,7 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
 (defn reply-action
   "Generate a response for some request. Params is working-params, which has injected params for the current request."
   [rmap action params]
+  (prn (format "reply-action rmap count: %s action: %s params: %s" (count rmap) action params))
   (cond (or (nil? rmap)
             (nil? (some #{action} ["set_limit_date" "show" "list-all" "list-limit" "insert" "update-db" "catreport"])))
         ;; A redirect would make sense, maybe.
@@ -383,18 +399,26 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
 ;; year-1900, month is zero based, day is one based.
 ;; (new java.util.Date 118 0 1) 
 (defn check-limit-date
+  "If param date is good then use it. 
+  If params date is 2 digits then combine with limit_date. 
+  If have limit_date then use it.
+  Else returns today's date."
   [params]
   (let [rdate (get params "date")
         pld (get params "limit_date")
-        ld (if (seq rdate)
-             (str/replace pld #"..$" (format "%02d" (Integer. rdate)))
-             pld)]
-    
-    (if (seq ld)
-      (do
-        (prn "using ld: " ld)
-        (format/unparse multi-parser (format/parse multi-parser ld)))
-      (.format (java.text.SimpleDateFormat. "YYYY-MM-dd") (new java.util.Date)))))
+        generated-date (if (and (seq rdate) (= 2 (count rdate)))
+                         (str/replace pld #"..$" (format "%02d" (Integer. rdate)))
+                         nil)]
+    (cond (seq (is-good-date rdate))
+          rdate
+          (seq generated-date)
+          generated-date
+          (seq pld)
+          (do
+            (prn "parsing limit_date: " pld)
+            (format/unparse multi-parser (format/parse multi-parser pld)))
+          :else
+          (.format (java.text.SimpleDateFormat. "YYYY-MM-dd") (new java.util.Date)))))
 
 ;; expense-mgr.core=> 2018-12-10 21:28:40.850:WARN:oejs.AbstractHttpConnection:/app?
 ;; action=insert&limit_date=2017-01-22&using_year=&id=&date=24&category=3&amount=1.50&mileage=&notes=flkjf&insert=insert
@@ -412,17 +436,17 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
           _ (prn "tp: " temp-params)
           action (get temp-params "action")
           ras  request
-          limit-date (check-limit-date temp-params)
-          [using-year using-month] (check-uy {:date (or limit-date (get temp-params "date") "")
+          nice-date (check-limit-date temp-params)
+          [using-year using-month] (check-uy {:date nice-date
                                               :using-year (or (get temp-params "using_year") "")
                                               :using-month (or (get temp-params "using_month") "")})
-          _ (prn "calc limit-date: " limit-date " ld: " (get temp-params "limit_date") " date: " (get temp-params "date") " uy: " using-year " um: " using-month)
+          _ (prn "nice-date: " nice-date " limit-date: " (get temp-params "limit_date") " date: " (get temp-params "date") " uy: " using-year " um: " using-month)
           ;; Add :using-year, replace "date" value with a better date value
           working-params (merge temp-params
                                 {:using-year using-year
                                  :using-month using-month
-                                 :limit-date limit-date
-                                 "date" (or limit-date (get temp-params "date"))})
+                                 :limit-date nice-date
+                                 "date" nice-date})
           ;; rmap is a list of records from the db, will full category data
           rmap (request-action working-params action)]
       (prn "wp: " working-params)
@@ -445,7 +469,10 @@ Initialize with empty string, map-re on the body, and accumulate all the body st
 
 ;; Need -main for 'lien run', but it is ignored by 'lein ring'.
 (defn -main []
-  (ds))
+  (prn "-main starts")
+  (ds)
+  (prn "server: " server)
+  (.start server))
 
 ;; https://stackoverflow.com/questions/39765943/clojure-java-jdbc-lazy-query
 ;; https://jdbc.postgresql.org/documentation/83/query.html#query-with-cursor
